@@ -3,6 +3,7 @@
   <scoreBoard />
   <br/>
   <gameBoard />
+  a
   <br/>
   <tileRack />
 </template>
