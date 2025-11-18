@@ -1,0 +1,14 @@
+# Build configuration
+[build]
+  command = "npm run build"
+  publish = "build"
+
+# Build settings
+[build.environment]
+  NODE_VERSION = "18"
+
+# SPA fallback for client-side routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

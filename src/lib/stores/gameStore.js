@@ -1,0 +1,282 @@
+import { writable, derived, get } from 'svelte/store';
+import { browser } from '$app/environment';
+import { getLanguageConfig } from '../languages.js';
+import { generateToken, generateSessionId } from '../utils.js';
+
+const BOARD_SIZE = 15;
+
+// Special cells on the Scrabble board
+const SPECIAL_CELLS = {
+  TW: [ // Triple Word
+    [0, 0], [0, 7], [0, 14],
+    [7, 0], [7, 14],
+    [14, 0], [14, 7], [14, 14]
+  ],
+  DW: [ // Double Word
+    [1, 1], [2, 2], [3, 3], [4, 4],
+    [1, 13], [2, 12], [3, 11], [4, 10],
+    [13, 1], [12, 2], [11, 3], [10, 4],
+    [13, 13], [12, 12], [11, 11], [10, 10],
+    [7, 7] // Center star
+  ],
+  TL: [ // Triple Letter
+    [1, 5], [1, 9],
+    [5, 1], [5, 5], [5, 9], [5, 13],
+    [9, 1], [9, 5], [9, 9], [9, 13],
+    [13, 5], [13, 9]
+  ],
+  DL: [ // Double Letter
+    [0, 3], [0, 11],
+    [2, 6], [2, 8],
+    [3, 0], [3, 7], [3, 14],
+    [6, 2], [6, 6], [6, 8], [6, 12],
+    [7, 3], [7, 11],
+    [8, 2], [8, 6], [8, 8], [8, 12],
+    [11, 0], [11, 7], [11, 14],
+    [12, 6], [12, 8],
+    [14, 3], [14, 11]
+  ]
+};
+
+function createEmptyBoard() {
+  const board = [];
+  for (let row = 0; row < BOARD_SIZE; row++) {
+    board[row] = [];
+    for (let col = 0; col < BOARD_SIZE; col++) {
+      let type = 'normal';
+
+      // Check special cells
+      if (SPECIAL_CELLS.TW.some(([r, c]) => r === row && c === col)) type = 'TW';
+      else if (SPECIAL_CELLS.DW.some(([r, c]) => r === row && c === col)) type = 'DW';
+      else if (SPECIAL_CELLS.TL.some(([r, c]) => r === row && c === col)) type = 'TL';
+      else if (SPECIAL_CELLS.DL.some(([r, c]) => r === row && c === col)) type = 'DL';
+
+      board[row][col] = {
+        type,
+        tile: null, // { letter, points, isBlank }
+        locked: false
+      };
+    }
+  }
+  return board;
+}
+
+function shuffleTiles(tiles) {
+  const shuffled = [...tiles];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+function createInitialGameState() {
+  return {
+    gameToken: null,
+    language: 'EN',
+    board: createEmptyBoard(),
+    tileBag: [],
+    players: [],
+    currentPlayerIndex: 0,
+    gameStarted: false,
+    gameEnded: false,
+    lastUpdate: Date.now()
+  };
+}
+
+// Main game state store
+function createGameStore() {
+  const { subscribe, set, update } = writable(createInitialGameState());
+
+  return {
+    subscribe,
+
+    // Initialize a new game
+    newGame: (hostName, language = 'EN') => {
+      const gameToken = generateToken();
+      const langConfig = getLanguageConfig(language);
+      const tileBag = shuffleTiles(langConfig.tiles);
+
+      const initialRack = tileBag.splice(0, 7);
+      const hostPlayer = {
+        sessionId: generateSessionId(),
+        name: hostName,
+        rack: initialRack,
+        score: 0,
+        isHost: true
+      };
+
+      const state = {
+        gameToken,
+        language,
+        board: createEmptyBoard(),
+        tileBag,
+        players: [hostPlayer],
+        currentPlayerIndex: 0,
+        gameStarted: false,
+        gameEnded: false,
+        lastUpdate: Date.now()
+      };
+
+      set(state);
+
+      if (browser) {
+        localStorage.setItem(`scrabble_game_${gameToken}`, JSON.stringify(state));
+      }
+
+      return { gameToken, sessionId: hostPlayer.sessionId };
+    },
+
+    // Join an existing game
+    joinGame: (gameToken, playerName) => {
+      if (!browser) return null;
+
+      const savedGame = localStorage.getItem(`scrabble_game_${gameToken}`);
+      if (!savedGame) return null;
+
+      const state = JSON.parse(savedGame);
+
+      // Check if game is full (max 4 players)
+      if (state.players.length >= 4) return null;
+
+      // Check if game already started
+      if (state.gameStarted) return null;
+
+      const langConfig = getLanguageConfig(state.language);
+      const initialRack = state.tileBag.splice(0, 7);
+      const sessionId = generateSessionId();
+
+      const newPlayer = {
+        sessionId,
+        name: playerName,
+        rack: initialRack,
+        score: 0,
+        isHost: false
+      };
+
+      state.players.push(newPlayer);
+      state.lastUpdate = Date.now();
+
+      set(state);
+      localStorage.setItem(`scrabble_game_${gameToken}`, JSON.stringify(state));
+
+      return sessionId;
+    },
+
+    // Start the game
+    startGame: () => {
+      update(state => {
+        state.gameStarted = true;
+        state.lastUpdate = Date.now();
+
+        if (browser) {
+          localStorage.setItem(`scrabble_game_${state.gameToken}`, JSON.stringify(state));
+        }
+
+        return state;
+      });
+    },
+
+    // Update board with new tiles
+    updateBoard: (placements) => {
+      update(state => {
+        placements.forEach(({ row, col, tile }) => {
+          state.board[row][col].tile = tile;
+          state.board[row][col].locked = true;
+        });
+        state.lastUpdate = Date.now();
+
+        if (browser) {
+          localStorage.setItem(`scrabble_game_${state.gameToken}`, JSON.stringify(state));
+        }
+
+        return state;
+      });
+    },
+
+    // Draw tiles from bag
+    drawTiles: (sessionId, count) => {
+      update(state => {
+        const playerIndex = state.players.findIndex(p => p.sessionId === sessionId);
+        if (playerIndex === -1) return state;
+
+        const drawnTiles = state.tileBag.splice(0, Math.min(count, state.tileBag.length));
+        state.players[playerIndex].rack.push(...drawnTiles);
+        state.lastUpdate = Date.now();
+
+        if (browser) {
+          localStorage.setItem(`scrabble_game_${state.gameToken}`, JSON.stringify(state));
+        }
+
+        return state;
+      });
+    },
+
+    // End turn and move to next player
+    endTurn: (sessionId, score) => {
+      update(state => {
+        const playerIndex = state.players.findIndex(p => p.sessionId === sessionId);
+        if (playerIndex === -1) return state;
+
+        state.players[playerIndex].score += score;
+        state.currentPlayerIndex = (state.currentPlayerIndex + 1) % state.players.length;
+        state.lastUpdate = Date.now();
+
+        if (browser) {
+          localStorage.setItem(`scrabble_game_${state.gameToken}`, JSON.stringify(state));
+        }
+
+        return state;
+      });
+    },
+
+    // Load game from localStorage
+    loadGame: (gameToken) => {
+      if (!browser) return false;
+
+      const savedGame = localStorage.getItem(`scrabble_game_${gameToken}`);
+      if (!savedGame) return false;
+
+      set(JSON.parse(savedGame));
+      return true;
+    },
+
+    // Sync state from external update
+    syncState: (newState) => {
+      set(newState);
+    },
+
+    // Reset game
+    reset: () => {
+      set(createInitialGameState());
+    }
+  };
+}
+
+export const gameStore = createGameStore();
+
+// Current session store
+export const currentSession = writable({
+  sessionId: null,
+  playerName: null,
+  gameToken: null
+});
+
+// Derived store for current player
+export const currentPlayer = derived(
+  [gameStore, currentSession],
+  ([$gameStore, $currentSession]) => {
+    if (!$currentSession.sessionId) return null;
+    return $gameStore.players.find(p => p.sessionId === $currentSession.sessionId);
+  }
+);
+
+// Derived store for whether it's current player's turn
+export const isMyTurn = derived(
+  [gameStore, currentSession],
+  ([$gameStore, $currentSession]) => {
+    if (!$currentSession.sessionId || !$gameStore.gameStarted) return false;
+    const currentPlayer = $gameStore.players[$gameStore.currentPlayerIndex];
+    return currentPlayer?.sessionId === $currentSession.sessionId;
+  }
+);
