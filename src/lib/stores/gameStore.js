@@ -244,6 +244,64 @@ function createGameStore() {
     // Sync state from external update
     syncState: (newState) => {
       set(newState);
+
+      // Only save to localStorage if we're the host
+      if (browser && newState.players && newState.players.length > 0) {
+        const hostPlayer = newState.players.find(p => p.isHost);
+        if (hostPlayer) {
+          localStorage.setItem(`scrabble_game_${newState.gameToken}`, JSON.stringify(newState));
+        }
+      }
+    },
+
+    // Get current state
+    getCurrentState: () => {
+      return get({ subscribe });
+    },
+
+    // Add player (used when player joins via WebRTC)
+    addPlayer: (playerName, sessionId) => {
+      update(state => {
+        const langConfig = getLanguageConfig(state.language);
+        const initialRack = state.tileBag.splice(0, 7);
+
+        const newPlayer = {
+          sessionId,
+          name: playerName,
+          rack: initialRack,
+          score: 0,
+          isHost: false
+        };
+
+        state.players.push(newPlayer);
+        state.lastUpdate = Date.now();
+
+        if (browser) {
+          localStorage.setItem(`scrabble_game_${state.gameToken}`, JSON.stringify(state));
+        }
+
+        return state;
+      });
+    },
+
+    // Remove player
+    removePlayer: (sessionId) => {
+      update(state => {
+        state.players = state.players.filter(p => p.sessionId !== sessionId);
+
+        // Adjust current player index if needed
+        if (state.currentPlayerIndex >= state.players.length) {
+          state.currentPlayerIndex = 0;
+        }
+
+        state.lastUpdate = Date.now();
+
+        if (browser) {
+          localStorage.setItem(`scrabble_game_${state.gameToken}`, JSON.stringify(state));
+        }
+
+        return state;
+      });
     },
 
     // Reset game

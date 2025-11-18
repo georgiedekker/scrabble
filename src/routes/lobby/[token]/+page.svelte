@@ -3,19 +3,24 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { gameStore, currentSession } from '$lib/stores/gameStore.js';
-  import { initSync, cleanupSync } from '$lib/sync.js';
+  import { peerStore, connectionCount } from '$lib/stores/peerStore.js';
+  import { initSyncAsHost, initSyncAsPlayer, broadcastUpdate, cleanupSync } from '$lib/sync.js';
   import { copyToClipboard } from '$lib/utils.js';
-  import { Copy, Users, Play, Loader } from 'lucide-svelte';
+  import { Copy, Users, Play, Loader, Wifi, WifiOff } from 'lucide-svelte';
 
   let token = '';
   let showCopied = false;
   let shareUrl = '';
+  let connectionError = '';
+  let isInitializing = true;
 
   $: token = $page.params.token;
   $: players = $gameStore.players;
   $: gameStarted = $gameStore.gameStarted;
   $: language = $gameStore.language;
   $: isHost = players.find(p => p.sessionId === $currentSession.sessionId)?.isHost || false;
+  $: connectedPeers = $connectionCount;
+  $: peerStatus = $peerStore.state;
 
   onMount(async () => {
     if (!$currentSession.sessionId) {
@@ -24,24 +29,85 @@
       return;
     }
 
-    // Load game state
-    const loaded = gameStore.loadGame(token);
-    if (!loaded) {
-      goto('/');
-      return;
-    }
+    try {
+      isInitializing = true;
 
-    // Initialize sync
-    initSync(token);
+      if (isHost) {
+        // Host: Initialize WebRTC as host
+        console.log('Initializing as host...');
+        const peerId = await initSyncAsHost();
+        console.log('Host peer ID:', peerId);
 
-    // Set share URL
-    if (typeof window !== 'undefined') {
-      shareUrl = `${window.location.origin}/?join=${token}`;
+        // The game token IS the peer ID for WebRTC
+        // Update game token if needed
+        if (token !== peerId) {
+          // Redirect to the correct peer ID
+          goto(`/lobby/${peerId}`);
+          return;
+        }
+
+        // Set up player connection handler
+        peerStore.onData((data, senderSessionId) => {
+          console.log('Lobby received data:', data);
+
+          if (data.type === 'join_request') {
+            // Add player to game
+            gameStore.addPlayer(data.playerName, senderSessionId);
+
+            // Broadcast updated state
+            const state = gameStore.getCurrentState();
+            broadcastUpdate({
+              type: 'state_update',
+              state,
+              timestamp: Date.now()
+            });
+          }
+        });
+      } else {
+        // Player: Load game and connect to host
+        const loaded = gameStore.loadGame(token);
+        if (!loaded) {
+          // No local game, will receive state from host after connecting
+          console.log('No local game found, connecting to host...');
+        }
+
+        await initSyncAsPlayer(token, $currentSession.sessionId);
+        console.log('Connected to host');
+
+        // Request to join game
+        setTimeout(() => {
+          const message = {
+            type: 'join_request',
+            playerName: $currentSession.playerName,
+            sessionId: $currentSession.sessionId,
+            timestamp: Date.now()
+          };
+
+          // Send via sync
+          import('$lib/sync.js').then(({ sendToHost }) => {
+            sendToHost(message);
+          });
+        }, 500);
+      }
+
+      isInitializing = false;
+
+      // Set share URL
+      if (typeof window !== 'undefined') {
+        shareUrl = `${window.location.origin}/?join=${token}`;
+      }
+    } catch (error) {
+      console.error('Lobby initialization error:', error);
+      connectionError = error.message || 'Failed to connect';
+      isInitializing = false;
     }
   });
 
   onDestroy(() => {
-    cleanupSync();
+    // Don't cleanup if we're navigating to game
+    if (!gameStarted) {
+      cleanupSync();
+    }
   });
 
   async function handleCopyToken() {
@@ -72,11 +138,20 @@
     }
 
     gameStore.startGame();
+
+    // Broadcast game start
+    const state = gameStore.getCurrentState();
+    broadcastUpdate({
+      type: 'game_start',
+      state,
+      timestamp: Date.now()
+    });
+
     goto(`/game/${token}`);
   }
 
   // Auto-navigate when game starts
-  $: if (gameStarted && typeof window !== 'undefined') {
+  $: if (gameStarted && !isHost && typeof window !== 'undefined') {
     goto(`/game/${token}`);
   }
 </script>
@@ -89,89 +164,124 @@
   <div class="content">
     <h1 class="title">Game Lobby</h1>
 
-    <div class="token-box">
-      <div class="token-display">
-        <span class="label">Game Token:</span>
-        <span class="token">{token}</span>
-        <button
-          class="copy-btn"
-          on:click={handleCopyToken}
-          title="Copy token"
-        >
-          <Copy class="w-5 h-5" />
+    {#if isInitializing}
+      <div class="loading-box">
+        <Loader class="w-12 h-12 animate-spin mx-auto mb-4 text-indigo-600" />
+        <p class="text-lg">
+          {isHost ? 'Setting up game...' : 'Connecting to host...'}
+        </p>
+      </div>
+    {:else if connectionError}
+      <div class="error-box">
+        <WifiOff class="w-12 h-12 mx-auto mb-4 text-red-600" />
+        <h3 class="text-xl font-bold mb-2">Connection Error</h3>
+        <p class="mb-4">{connectionError}</p>
+        <button class="btn btn-primary" on:click={() => goto('/')}>
+          Return Home
         </button>
       </div>
+    {:else}
+      <div class="token-box">
+        <div class="connection-status">
+          {#if peerStatus === 'connected'}
+            <Wifi class="w-5 h-5 text-green-400" />
+            <span class="text-sm text-green-100">Connected</span>
+          {:else}
+            <Loader class="w-5 h-5 animate-spin text-yellow-400" />
+            <span class="text-sm text-yellow-100">Connecting...</span>
+          {/if}
+        </div>
 
-      {#if showCopied}
-        <div class="copied-message">Copied to clipboard!</div>
-      {/if}
+        <div class="token-display">
+          <span class="label">Game ID:</span>
+          <span class="token">{token.substring(0, 8)}</span>
+          <button
+            class="copy-btn"
+            on:click={handleCopyToken}
+            title="Copy game ID"
+          >
+            <Copy class="w-5 h-5" />
+          </button>
+        </div>
 
-      <p class="share-text">Share this token with other players to join</p>
+        {#if showCopied}
+          <div class="copied-message">Copied to clipboard!</div>
+        {/if}
 
-      <button class="btn-share" on:click={handleCopyLink}>
-        <Copy class="w-4 h-4" />
-        Copy Share Link
-      </button>
-    </div>
+        <p class="share-text">Share this ID with other players to join</p>
 
-    <div class="info-box">
-      <h3 class="info-title">Language: {language}</h3>
-    </div>
+        {#if isHost}
+          <button class="btn-share" on:click={handleCopyLink}>
+            <Copy class="w-4 h-4" />
+            Copy Share Link
+          </button>
+        {/if}
+      </div>
 
-    <div class="players-section">
-      <h2 class="section-title">
-        <Users class="inline-block w-6 h-6" />
-        Players ({players.length}/4)
-      </h2>
+      <div class="info-box">
+        <h3 class="info-title">Language: {language}</h3>
+        {#if isHost}
+          <p class="text-sm text-indigo-700 mt-1">
+            {connectedPeers} player{connectedPeers !== 1 ? 's' : ''} connected via WebRTC
+          </p>
+        {/if}
+      </div>
 
-      <div class="players-list">
-        {#each players as player}
-          <div class="player-card">
-            <div class="player-name">
-              {player.name}
-              {#if player.isHost}
-                <span class="host-badge">Host</span>
-              {/if}
-            </div>
-          </div>
-        {/each}
+      <div class="players-section">
+        <h2 class="section-title">
+          <Users class="inline-block w-6 h-6" />
+          Players ({players.length}/4)
+        </h2>
 
-        {#if players.length < 4}
-          {#each Array(4 - players.length) as _}
-            <div class="player-card empty">
-              <div class="waiting-text">
-                <Loader class="w-5 h-5 animate-spin" />
-                Waiting for player...
+        <div class="players-list">
+          {#each players as player}
+            <div class="player-card">
+              <div class="player-name">
+                {player.name}
+                {#if player.isHost}
+                  <span class="host-badge">Host</span>
+                {/if}
               </div>
             </div>
           {/each}
+
+          {#if players.length < 4}
+            {#each Array(4 - players.length) as _}
+              <div class="player-card empty">
+                <div class="waiting-text">
+                  <Loader class="w-5 h-5 animate-spin" />
+                  Waiting for player...
+                </div>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      </div>
+
+      {#if isHost}
+        <button
+          class="btn btn-primary"
+          on:click={handleStartGame}
+          disabled={players.length < 2}
+        >
+          <Play class="w-5 h-5" />
+          Start Game
+        </button>
+
+        {#if players.length < 2}
+          <p class="help-text">Need at least 2 players to start</p>
         {/if}
-      </div>
-    </div>
-
-    {#if isHost}
-      <button
-        class="btn btn-primary"
-        on:click={handleStartGame}
-        disabled={players.length < 2}
-      >
-        <Play class="w-5 h-5" />
-        Start Game
-      </button>
-
-      {#if players.length < 2}
-        <p class="help-text">Need at least 2 players to start</p>
+      {:else}
+        <div class="waiting-box">
+          <Loader class="w-8 h-8 animate-spin mx-auto mb-2" />
+          <p>Waiting for host to start the game...</p>
+        </div>
       {/if}
-    {:else}
-      <div class="waiting-box">
-        <Loader class="w-8 h-8 animate-spin mx-auto mb-2" />
-        <p>Waiting for host to start the game...</p>
-      </div>
-    {/if}
 
-    <button class="btn btn-ghost" on:click={() => goto('/')}>
-      Leave Lobby
-    </button>
+      <button class="btn btn-ghost" on:click={() => {cleanupSync(); goto('/');}}>
+        Leave Lobby
+      </button>
+    {/if}
   </div>
 </div>
 
@@ -189,9 +299,21 @@
     @apply text-3xl md:text-4xl font-bold text-center text-indigo-900;
   }
 
+  .loading-box {
+    @apply bg-indigo-50 rounded-xl p-8 text-center text-indigo-800;
+  }
+
+  .error-box {
+    @apply bg-red-50 border-2 border-red-300 rounded-xl p-8 text-center text-red-800;
+  }
+
   .token-box {
     @apply bg-gradient-to-r from-indigo-500 to-purple-600;
-    @apply rounded-xl p-6 text-white;
+    @apply rounded-xl p-6 text-white relative;
+  }
+
+  .connection-status {
+    @apply absolute top-3 right-3 flex items-center gap-2;
   }
 
   .token-display {
@@ -203,7 +325,7 @@
   }
 
   .token {
-    @apply text-3xl font-bold tracking-wider;
+    @apply text-2xl md:text-3xl font-bold tracking-wider font-mono;
   }
 
   .copy-btn {

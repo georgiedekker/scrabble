@@ -27,6 +27,7 @@
   },
   "type": "module",
   "dependencies": {
-    "lucide-svelte": "^0.462.0"
+    "lucide-svelte": "^0.462.0",
+    "peerjs": "^1.5.4"
   }
 }

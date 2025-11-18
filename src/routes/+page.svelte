@@ -54,24 +54,24 @@
     }
 
     if (!gameToken.trim()) {
-      error = 'Please enter a game token';
+      error = 'Please enter a game ID';
       return;
     }
 
-    const sessionId = gameStore.joinGame(gameToken.trim().toUpperCase(), playerName.trim());
+    // With WebRTC, we don't check localStorage - we'll connect directly to peer
+    // Generate a session ID for this player
+    import('$lib/utils.js').then(({ generateSessionId }) => {
+      const sessionId = generateSessionId();
 
-    if (!sessionId) {
-      error = 'Game not found or already started';
-      return;
-    }
+      currentSession.set({
+        sessionId,
+        playerName: playerName.trim(),
+        gameToken: gameToken.trim()
+      });
 
-    currentSession.set({
-      sessionId,
-      playerName: playerName.trim(),
-      gameToken: gameToken.trim().toUpperCase()
+      // Navigate to lobby where WebRTC connection will be established
+      goto(`/lobby/${gameToken.trim()}`);
     });
-
-    goto(`/lobby/${gameToken.trim().toUpperCase()}`);
   }
 
   async function handleCopy(text) {

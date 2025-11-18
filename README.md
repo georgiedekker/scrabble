@@ -1,23 +1,26 @@
 # Scrabble - Multilingual Multiplayer Web Game
 
-A modern, serverless multiplayer Scrabble web application built with SvelteKit. Play Scrabble with friends in multiple languages on any device!
+A modern, serverless multiplingual Scrabble web application built with SvelteKit and WebRTC. Play Scrabble with friends across different devices in multiple languages!
 
 ## Features
 
+- **True Cross-Device Multiplayer**: Play with friends on different devices using WebRTC peer-to-peer connections
 - **Multilingual Support**: Play in English, Dutch, German, Polish, French, or multi-language mode
 - **2-4 Players**: Supports 2 to 4 players per game
-- **No Database Required**: All game state stored in browser localStorage
-- **Real-time Sync**: State changes broadcast 3x for reliability using BroadcastChannel API
+- **No Backend Required**: Peer-to-peer architecture with no server or database needed
+- **Real-time Sync**: State changes broadcast 3x for reliability using PeerJS WebRTC
 - **Mobile-First Design**: Touch-friendly interface optimized for phones, tablets, and desktops
-- **Token-Based Sessions**: Simple game creation and joining with 6-character tokens
+- **Simple Game IDs**: Share easy peer IDs to invite players
 - **Cross-Browser Compatible**: Works on all modern browsers
+- **Host-Authoritative**: Game host maintains game state for consistency
 
 ## Technology Stack
 
 - **Framework**: SvelteKit with static adapter
 - **Styling**: Tailwind CSS
-- **State Management**: Svelte stores with localStorage persistence
-- **Real-time Sync**: BroadcastChannel API with localStorage fallback
+- **State Management**: Svelte stores with localStorage persistence (host only)
+- **Real-time Sync**: PeerJS WebRTC for peer-to-peer connections
+- **Signaling**: PeerJS cloud server (free hosted signaling)
 - **Deployment**: Netlify-ready with static site generation
 - **Icons**: Lucide Svelte
 
@@ -65,7 +68,7 @@ npm run preview
 3. Enter your name
 4. Select a language (or multi-language)
 5. Click "Create Game"
-6. Share the 6-character game token with other players
+6. Share the Game ID (peer ID) with other players - they can use it to connect directly to your game
 
 ### Joining a Game
 
@@ -94,6 +97,40 @@ npm run preview
   - **TL** (Blue): Triple Letter Score
   - **DL** (Light Blue): Double Letter Score
 - Using all 7 tiles: +50 bonus points
+
+## WebRTC Architecture
+
+The app uses a **host-authoritative** peer-to-peer architecture:
+
+1. **Game Host**: The player who creates the game becomes the host
+   - Initializes a PeerJS peer and gets a unique ID
+   - This peer ID becomes the Game ID
+   - Maintains the authoritative game state
+   - Broadcasts state updates to all connected players
+
+2. **Players**: Players who join connect directly to the host
+   - Connect to host's peer ID via WebRTC
+   - Send actions (tile placements, pass turn) to host
+   - Receive state updates from host
+
+3. **Signaling**: Uses PeerJS cloud server (free)
+   - No custom backend needed
+   - Handles ICE candidate exchange
+   - Falls back to TURN servers for NAT traversal
+
+4. **Reliability**: All messages sent 3 times with 50ms delays
+   - Ensures delivery even with packet loss
+   - No acknowledgment system needed for this use case
+
+### Connection Flow
+
+```
+Player Creates Game → PeerJS assigns ID → Share ID with friends
+                                            ↓
+Friends Join → Connect to Host ID → WebRTC P2P established
+                                            ↓
+Host broadcasts state → Players receive → Game synced
+```
 
 ## Deployment
 

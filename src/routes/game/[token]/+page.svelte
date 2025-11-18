@@ -3,7 +3,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { gameStore, currentSession, currentPlayer, isMyTurn } from '$lib/stores/gameStore.js';
-  import { initSync, cleanupSync, setupStateBroadcast } from '$lib/sync.js';
+  import { sendToHost, broadcastUpdate, cleanupSync } from '$lib/sync.js';
+  import { peerStore } from '$lib/stores/peerStore.js';
   import { getLanguageConfig } from '$lib/languages.js';
   import { calculateScore, validatePlacement, isFirstMoveCentered } from '$lib/utils.js';
   import Board from '$lib/components/Board.svelte';
@@ -38,6 +39,8 @@
     }
   }
 
+  $: isHost = $peerStore.isHost;
+
   onMount(async () => {
     if (!$currentSession.sessionId) {
       goto('/');
@@ -55,12 +58,17 @@
       return;
     }
 
-    initSync(token);
-    setupStateBroadcast();
+    // Sync is already initialized from lobby
+    // Just verify connection
+    const status = peerStore.getStatus();
+    if (!status.isConnected) {
+      console.error('Not connected to peer network');
+      goto(`/lobby/${token}`);
+    }
   });
 
   onDestroy(() => {
-    cleanupSync();
+    // Don't cleanup - may navigate back
   });
 
   function handleTileSelect(index) {
@@ -145,14 +153,31 @@
     // Calculate score
     const score = calculateScore(temporaryPlacements, board, language);
 
-    // Update board with placements
-    gameStore.updateBoard(temporaryPlacements);
+    if (isHost) {
+      // Host: Update directly and broadcast
+      gameStore.updateBoard(temporaryPlacements);
+      gameStore.drawTiles($currentSession.sessionId, temporaryPlacements.length);
+      gameStore.endTurn($currentSession.sessionId, score);
 
-    // Draw new tiles
-    gameStore.drawTiles($currentSession.sessionId, temporaryPlacements.length);
-
-    // End turn
-    gameStore.endTurn($currentSession.sessionId, score);
+      const state = gameStore.getCurrentState();
+      broadcastUpdate({
+        type: 'state_update',
+        state,
+        timestamp: Date.now()
+      });
+    } else {
+      // Player: Send action to host
+      sendToHost({
+        type: 'action',
+        action: {
+          type: 'place_tiles',
+          placements: temporaryPlacements,
+          tilesUsed: temporaryPlacements.length,
+          score
+        },
+        timestamp: Date.now()
+      });
+    }
 
     // Reset temporary state
     temporaryPlacements = [];
@@ -165,7 +190,25 @@
 
     if (confirm('Are you sure you want to pass your turn?')) {
       handleRecall();
-      gameStore.endTurn($currentSession.sessionId, 0);
+
+      if (isHost) {
+        gameStore.endTurn($currentSession.sessionId, 0);
+
+        const state = gameStore.getCurrentState();
+        broadcastUpdate({
+          type: 'state_update',
+          state,
+          timestamp: Date.now()
+        });
+      } else {
+        sendToHost({
+          type: 'action',
+          action: {
+            type: 'pass_turn'
+          },
+          timestamp: Date.now()
+        });
+      }
     }
   }
 </script>
