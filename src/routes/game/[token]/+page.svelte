@@ -16,6 +16,7 @@
   let temporaryPlacements = [];
   let error = '';
   let isFirstMove = true;
+  let draggingTileIndex = -1;
 
   $: token = $page.params.token;
   $: language = $gameStore.language;
@@ -76,6 +77,72 @@
     selectedTileIndex = selectedTileIndex === index ? -1 : index;
   }
 
+  function handleTileDragStart(index, letter) {
+    if (!$isMyTurn) return;
+    draggingTileIndex = index;
+  }
+
+  function broadcastTemporaryPlacements() {
+    if (isHost) {
+      // Host: Update local state directly
+      gameStore.updateTemporaryPlacements($currentSession.sessionId, temporaryPlacements);
+
+      // Broadcast to all players
+      const state = gameStore.getCurrentState();
+      broadcastUpdate({
+        type: 'state_update',
+        state,
+        timestamp: Date.now()
+      });
+    } else {
+      // Player: Send to host
+      sendToHost({
+        type: 'temporary_placement',
+        placements: temporaryPlacements,
+        timestamp: Date.now()
+      });
+    }
+  }
+
+  function handleCellDrop(row, col, tileData) {
+    if (!$isMyTurn) {
+      error = "It's not your turn";
+      return;
+    }
+
+    const cell = board[row][col];
+
+    // If cell is locked or already has a tile, can't place here
+    if (cell.locked || cell.tile) {
+      return;
+    }
+
+    // Check if there's already a temporary placement here
+    const existingIndex = temporaryPlacements.findIndex(p => p.row === row && p.col === col);
+    if (existingIndex !== -1) {
+      return;
+    }
+
+    // Place the tile
+    const letter = tileData.letter;
+    const tile = {
+      letter,
+      points: langConfig.points[letter] || 0,
+      isBlank: letter === '_'
+    };
+
+    temporaryPlacements = [...temporaryPlacements, { row, col, tile }];
+
+    // Remove tile from rack
+    myRack = myRack.filter((_, i) => i !== tileData.index);
+    selectedTileIndex = -1;
+    draggingTileIndex = -1;
+    error = '';
+
+    // Broadcast temporary placement to other players
+    broadcastTemporaryPlacements();
+  }
+
   function handleCellClick(row, col) {
     if (!$isMyTurn) {
       error = "It's not your turn";
@@ -116,6 +183,9 @@
       myRack = myRack.filter((_, i) => i !== selectedTileIndex);
       selectedTileIndex = -1;
       error = '';
+
+      // Broadcast temporary placement to other players
+      broadcastTemporaryPlacements();
     }
   }
 
@@ -128,6 +198,9 @@
     temporaryPlacements = [];
     selectedTileIndex = -1;
     error = '';
+
+    // Broadcast cleared temporary placements
+    broadcastTemporaryPlacements();
   }
 
   function handleEndTurn() {
@@ -262,6 +335,7 @@
   <div class="board-section">
     <Board
       onCellClick={handleCellClick}
+      onCellDrop={handleCellDrop}
       {temporaryPlacements}
     />
   </div>
@@ -272,6 +346,7 @@
       tiles={myRack}
       {language}
       onTileSelect={handleTileSelect}
+      onDragStart={handleTileDragStart}
       selectedIndex={selectedTileIndex}
       disabled={!$isMyTurn}
     />
@@ -324,21 +399,21 @@
   .game-container {
     @apply min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100;
     @apply flex flex-col;
-    @apply p-2 md:p-4;
-    @apply gap-2 md:gap-4;
+    @apply p-2;
+    @apply gap-1 md:gap-2;
   }
 
   .header {
-    @apply bg-white rounded-lg shadow-lg p-3 md:p-4;
+    @apply bg-white rounded-lg shadow-lg p-2;
     @apply flex items-center justify-between;
   }
 
   .game-title {
-    @apply text-xl md:text-2xl font-bold text-indigo-900;
+    @apply text-lg md:text-xl font-bold text-indigo-900;
   }
 
   .game-info {
-    @apply flex gap-3 text-sm text-gray-600;
+    @apply flex gap-2 text-xs text-gray-600;
   }
 
   .token {
@@ -346,12 +421,12 @@
   }
 
   .players-bar {
-    @apply bg-white rounded-lg shadow-lg p-3;
-    @apply grid grid-cols-2 md:grid-cols-4 gap-2;
+    @apply bg-white rounded-lg shadow-lg p-2;
+    @apply grid grid-cols-2 md:grid-cols-4 gap-1 md:gap-2;
   }
 
   .player-info {
-    @apply bg-gray-50 rounded-lg p-3;
+    @apply bg-gray-50 rounded-lg p-2;
     @apply border-2 border-gray-200;
     @apply transition-all duration-200;
   }
@@ -365,49 +440,51 @@
   }
 
   .player-header {
-    @apply flex items-center gap-2 mb-1;
+    @apply flex items-center gap-1 mb-1;
   }
 
   .player-name {
-    @apply font-semibold text-gray-800 text-sm;
+    @apply font-semibold text-gray-800 text-xs;
   }
 
   .player-score {
-    @apply text-lg font-bold text-indigo-600;
+    @apply text-sm font-bold text-indigo-600;
   }
 
   .turn-indicator {
-    @apply text-xs text-green-600 font-semibold mt-1;
+    @apply text-xs text-green-600 font-semibold;
   }
 
   .error-message {
     @apply bg-red-100 border border-red-400 text-red-700;
-    @apply px-4 py-3 rounded-lg text-center font-semibold;
+    @apply px-3 py-2 rounded-lg text-center font-semibold text-sm;
   }
 
   .info-message {
     @apply bg-blue-100 border border-blue-400 text-blue-700;
-    @apply px-4 py-3 rounded-lg text-center font-semibold;
+    @apply px-3 py-2 rounded-lg text-center font-semibold text-sm;
   }
 
   .board-section {
-    @apply flex-1 bg-white rounded-lg shadow-lg;
-    @apply overflow-hidden;
-    @apply min-h-0;
+    /* Make board take 60-70% of viewport height */
+    height: min(70vh, calc(100vw - 2rem));
+    @apply bg-white rounded-lg shadow-lg;
+    @apply flex items-center justify-center;
+    @apply p-2;
   }
 
   .rack-section {
-    @apply bg-white rounded-lg shadow-lg p-2 md:p-4;
+    @apply bg-white rounded-lg shadow-lg p-2;
   }
 
   .actions {
-    @apply flex gap-2 md:gap-4 justify-center;
+    @apply flex gap-2 justify-center;
   }
 
   .btn {
-    @apply px-4 md:px-6 py-2 md:py-3 rounded-lg font-semibold;
+    @apply px-3 py-2 rounded-lg font-semibold text-sm;
     @apply transition-all duration-200;
-    @apply flex items-center gap-2;
+    @apply flex items-center gap-1;
     @apply disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
@@ -425,20 +502,20 @@
   }
 
   .instructions {
-    @apply bg-indigo-50 rounded-lg p-3 text-center;
+    @apply bg-indigo-50 rounded-lg p-2 text-center;
   }
 
   .instruction-text {
-    @apply text-sm text-indigo-800 font-medium;
+    @apply text-xs text-indigo-800 font-medium;
   }
 
   @media (max-width: 640px) {
     .game-info {
-      @apply flex-col gap-1 text-xs;
+      @apply flex-col gap-1;
     }
 
     .btn {
-      @apply text-sm px-3 py-2;
+      @apply text-xs px-2 py-1;
     }
   }
 </style>

@@ -5,6 +5,7 @@
   export let tiles = [];
   export let language = 'EN';
   export let onTileSelect = null;
+  export let onDragStart = null;
   export let selectedIndex = -1;
   export let disabled = false;
 
@@ -34,6 +35,16 @@
     draggedIndex = index;
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', index.toString());
+    event.dataTransfer.setData('application/json', JSON.stringify({
+      index,
+      letter: tiles[index],
+      tileData: getTileData(tiles[index])
+    }));
+
+    // Notify parent component
+    if (onDragStart) {
+      onDragStart(index, tiles[index]);
+    }
 
     // For touch devices
     if (event.type === 'touchstart') {

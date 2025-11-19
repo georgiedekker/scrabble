@@ -4,11 +4,15 @@
   import Tile from './Tile.svelte';
 
   export let onCellClick = null;
+  export let onCellDrop = null;
   export let temporaryPlacements = [];
 
   $: board = $gameStore.board;
   $: language = $gameStore.language;
   $: langConfig = getLanguageConfig(language);
+  $: allTemporaryPlacements = $gameStore.temporaryPlacements || {};
+
+  let dragOverCell = null;
 
   function getCellClass(type) {
     switch (type) {
@@ -48,16 +52,79 @@
   }
 
   function getTileAtPosition(row, col) {
-    // Check if there's a temporary placement
+    // Check if there's a temporary placement from current player first
     const tempPlacement = temporaryPlacements.find(p => p.row === row && p.col === col);
     if (tempPlacement) return tempPlacement.tile;
+
+    // Check all other players' temporary placements
+    for (const sessionId in allTemporaryPlacements) {
+      const placements = allTemporaryPlacements[sessionId];
+      const otherPlacement = placements?.find(p => p.row === row && p.col === col);
+      if (otherPlacement) return otherPlacement.tile;
+    }
 
     // Otherwise return the permanent tile
     return board[row][col].tile;
   }
 
   function isTemporaryPlacement(row, col) {
-    return temporaryPlacements.some(p => p.row === row && p.col === col);
+    // Check current player's placements
+    if (temporaryPlacements.some(p => p.row === row && p.col === col)) {
+      return true;
+    }
+
+    // Check all other players' temporary placements
+    for (const sessionId in allTemporaryPlacements) {
+      const placements = allTemporaryPlacements[sessionId];
+      if (placements?.some(p => p.row === row && p.col === col)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  function handleDragOver(event, row, col) {
+    const cell = board[row][col];
+
+    // Only allow drop on empty, unlocked cells
+    if (cell.locked || cell.tile || isTemporaryPlacement(row, col)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    dragOverCell = { row, col };
+  }
+
+  function handleDragLeave() {
+    dragOverCell = null;
+  }
+
+  function handleDrop(event, row, col) {
+    event.preventDefault();
+    dragOverCell = null;
+
+    const cell = board[row][col];
+
+    // Only allow drop on empty, unlocked cells
+    if (cell.locked || cell.tile || isTemporaryPlacement(row, col)) {
+      return;
+    }
+
+    try {
+      const data = event.dataTransfer.getData('application/json');
+      if (data && onCellDrop) {
+        const tileData = JSON.parse(data);
+        onCellDrop(row, col, tileData);
+      }
+    } catch (err) {
+      console.error('Error handling drop:', err);
+    }
+  }
+
+  function isDragOver(row, col) {
+    return dragOverCell && dragOverCell.row === row && dragOverCell.col === col;
   }
 </script>
 
@@ -69,7 +136,11 @@
           class="cell {getCellClass(cell.type)}"
           class:has-tile={cell.tile || isTemporaryPlacement(rowIndex, colIndex)}
           class:temporary={isTemporaryPlacement(rowIndex, colIndex)}
+          class:drag-over={isDragOver(rowIndex, colIndex)}
           on:click={() => handleCellClick(rowIndex, colIndex)}
+          on:dragover={(e) => handleDragOver(e, rowIndex, colIndex)}
+          on:dragleave={handleDragLeave}
+          on:drop={(e) => handleDrop(e, rowIndex, colIndex)}
           disabled={cell.locked}
         >
           {#if getTileAtPosition(rowIndex, colIndex)}
@@ -129,6 +200,10 @@
 
   .cell.temporary {
     @apply ring-2 ring-yellow-400 ring-inset;
+  }
+
+  .cell.drag-over {
+    @apply ring-4 ring-blue-500 ring-inset brightness-110 scale-105;
   }
 
   .cell-label {

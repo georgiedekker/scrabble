@@ -35,6 +35,17 @@ export async function initSyncAsHost(peerId = null) {
     } else if (data.type === 'action') {
       // Handle player actions
       handlePlayerAction(data.action, senderSessionId);
+    } else if (data.type === 'temporary_placement') {
+      // Handle temporary tile placement
+      gameStore.updateTemporaryPlacements(senderSessionId, data.placements);
+
+      // Broadcast to all other players
+      const state = gameStore.getCurrentState();
+      broadcastUpdate({
+        type: 'state_update',
+        state,
+        timestamp: Date.now()
+      });
     } else if (data.type === 'request_state') {
       // Send full state to player
       const state = gameStore.getCurrentState();

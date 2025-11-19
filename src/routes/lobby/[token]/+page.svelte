@@ -61,7 +61,7 @@
         await initSyncAsPlayer(token, $currentSession.sessionId);
         console.log('Connected to host');
 
-        // Request to join game
+        // Request to join game (send once, not with retry)
         setTimeout(() => {
           const message = {
             type: 'join_request',
@@ -70,10 +70,8 @@
             timestamp: Date.now()
           };
 
-          // Send via sync
-          import('$lib/sync.js').then(({ sendToHost }) => {
-            sendToHost(message);
-          });
+          // Send directly via peerStore (only once)
+          peerStore.sendToHost(message);
         }, 500);
       }
 

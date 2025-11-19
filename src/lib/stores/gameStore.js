@@ -80,6 +80,7 @@ function createInitialGameState() {
     currentPlayerIndex: 0,
     gameStarted: false,
     gameEnded: false,
+    temporaryPlacements: {}, // Map of sessionId -> array of placements
     lastUpdate: Date.now()
   };
 }
@@ -244,6 +245,26 @@ function createGameStore() {
 
         state.players[playerIndex].score += score;
         state.currentPlayerIndex = (state.currentPlayerIndex + 1) % state.players.length;
+
+        // Clear temporary placements for the player who just ended their turn
+        if (state.temporaryPlacements[sessionId]) {
+          delete state.temporaryPlacements[sessionId];
+        }
+
+        state.lastUpdate = Date.now();
+
+        if (browser) {
+          localStorage.setItem(`scrabble_game_${state.gameToken}`, JSON.stringify(state));
+        }
+
+        return state;
+      });
+    },
+
+    // Update temporary placements for a player
+    updateTemporaryPlacements: (sessionId, placements) => {
+      update(state => {
+        state.temporaryPlacements[sessionId] = placements;
         state.lastUpdate = Date.now();
 
         if (browser) {
@@ -286,6 +307,18 @@ function createGameStore() {
     // Add player (used when player joins via WebRTC)
     addPlayer: (playerName, sessionId) => {
       update(state => {
+        // Check if player already exists (prevent duplicates)
+        if (state.players.some(p => p.sessionId === sessionId)) {
+          console.log('Player already exists with session:', sessionId);
+          return state;
+        }
+
+        // Check if game is full
+        if (state.players.length >= 4) {
+          console.warn('Game is full, cannot add more players');
+          return state;
+        }
+
         const langConfig = getLanguageConfig(state.language);
         const initialRack = state.tileBag.splice(0, 7);
 
