@@ -38,9 +38,20 @@ function createPeerStore() {
       if (!browser) return null;
 
       return new Promise((resolve, reject) => {
-        // Create peer with PeerJS cloud server
+        // Create peer with PeerJS cloud server and proper ICE configuration
+        const config = {
+          debug: 1,
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:global.stun.twilio.com:3478' }
+            ],
+            iceCandidatePoolSize: 10
+          }
+        };
+
         // If peerId is provided, use it for reconnection
-        const peer = peerId ? new Peer(peerId, { debug: 1 }) : new Peer({ debug: 1 });
+        const peer = peerId ? new Peer(peerId, config) : new Peer(config);
 
         peer.on('open', (id) => {
           console.log('Host peer initialized with ID:', id);
@@ -196,7 +207,14 @@ function createPeerStore() {
 
       return new Promise((resolve, reject) => {
         const peer = new Peer({
-          debug: 1
+          debug: 1,
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:global.stun.twilio.com:3478' }
+            ],
+            iceCandidatePoolSize: 10
+          }
         });
 
         peer.on('open', (id) => {
