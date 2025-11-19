@@ -163,6 +163,29 @@ function createGameStore() {
       return sessionId;
     },
 
+    // Update game token (used when peer ID is assigned)
+    updateGameToken: (newToken, sessionId) => {
+      update(state => {
+        const oldToken = state.gameToken;
+
+        // Update token
+        state.gameToken = newToken;
+        state.lastUpdate = Date.now();
+
+        if (browser) {
+          // Remove old localStorage entry
+          if (oldToken) {
+            localStorage.removeItem(`scrabble_game_${oldToken}`);
+          }
+
+          // Save with new token
+          localStorage.setItem(`scrabble_game_${newToken}`, JSON.stringify(state));
+        }
+
+        return state;
+      });
+    },
+
     // Start the game
     startGame: () => {
       update(state => {

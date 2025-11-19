@@ -35,16 +35,33 @@
       return;
     }
 
-    const result = gameStore.newGame(playerName.trim(), selectedLanguage);
+    try {
+      error = 'Initializing...';
 
-    currentSession.set({
-      sessionId: result.sessionId,
-      playerName: playerName.trim(),
-      gameToken: result.gameToken
-    });
+      // First, initialize peer to get the peer ID
+      const { initSyncAsHost } = await import('$lib/sync.js');
+      const peerId = await initSyncAsHost();
 
-    // Navigate to lobby to wait for other players
-    goto(`/lobby/${result.gameToken}`);
+      // Use the peer ID as the game token
+      const result = gameStore.newGame(playerName.trim(), selectedLanguage);
+
+      // Update the game with the peer ID as token
+      gameStore.updateGameToken(peerId, result.sessionId);
+
+      currentSession.set({
+        sessionId: result.sessionId,
+        playerName: playerName.trim(),
+        gameToken: peerId
+      });
+
+      error = '';
+
+      // Navigate to lobby
+      goto(`/lobby/${peerId}`);
+    } catch (err) {
+      console.error('Failed to create game:', err);
+      error = 'Failed to initialize connection. Please try again.';
+    }
   }
 
   async function joinExistingGame() {
@@ -201,14 +218,13 @@
         </div>
 
         <div class="form-group">
-          <label for="token">Game Token</label>
+          <label for="token">Game ID</label>
           <input
             id="token"
             type="text"
             bind:value={gameToken}
-            placeholder="Enter 6-character token"
-            maxlength="6"
-            class="input uppercase"
+            placeholder="Enter game ID from host"
+            class="input"
           />
         </div>
 
@@ -287,10 +303,6 @@
     @apply w-full px-4 py-3 border-2 border-gray-300 rounded-lg;
     @apply focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200;
     @apply transition-all duration-200;
-  }
-
-  .input.uppercase {
-    text-transform: uppercase;
   }
 
   .button-group {

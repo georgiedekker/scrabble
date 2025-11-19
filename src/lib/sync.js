@@ -13,7 +13,13 @@ let isInitialized = false;
  * Initialize synchronization for host
  */
 export async function initSyncAsHost() {
-  if (!browser || isInitialized) return null;
+  if (!browser) return null;
+
+  // If already initialized, return existing peer ID
+  if (isInitialized) {
+    const status = peerStore.getStatus();
+    return status.peerId;
+  }
 
   try {
     // Initialize as host

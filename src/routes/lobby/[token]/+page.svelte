@@ -33,17 +33,16 @@
       isInitializing = true;
 
       if (isHost) {
-        // Host: Initialize WebRTC as host
-        console.log('Initializing as host...');
-        const peerId = await initSyncAsHost();
-        console.log('Host peer ID:', peerId);
+        // Host: Peer should already be initialized from home page
+        // Just verify and set up handlers
+        console.log('Setting up lobby as host...');
 
-        // The game token IS the peer ID for WebRTC
-        // Update game token if needed
-        if (token !== peerId) {
-          // Redirect to the correct peer ID
-          goto(`/lobby/${peerId}`);
-          return;
+        const status = peerStore.getStatus();
+
+        if (!status.isConnected) {
+          // If somehow not connected, try to initialize
+          console.log('Peer not initialized, initializing now...');
+          await initSyncAsHost();
         }
 
         // Set up player connection handler
