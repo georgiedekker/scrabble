@@ -466,11 +466,12 @@
   }
 
   .board-section {
-    /* Make board take 60-70% of viewport height */
-    height: min(70vh, calc(100vw - 2rem));
+    /* Make board grow to fill available space */
+    flex: 1;
+    min-height: 0;
     @apply bg-white rounded-lg shadow-lg;
     @apply flex items-center justify-center;
-    @apply p-2;
+    padding: 0.5rem;
   }
 
   .rack-section {

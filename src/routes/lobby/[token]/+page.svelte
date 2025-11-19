@@ -61,6 +61,14 @@
         await initSyncAsPlayer(token, $currentSession.sessionId);
         console.log('Connected to host');
 
+        // Request current state immediately to check if game has started
+        setTimeout(() => {
+          peerStore.sendToHost({
+            type: 'request_state',
+            timestamp: Date.now()
+          });
+        }, 100);
+
         // Request to join game (send once, not with retry)
         setTimeout(() => {
           const message = {

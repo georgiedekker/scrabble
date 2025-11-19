@@ -264,6 +264,11 @@ function createGameStore() {
     // Update temporary placements for a player
     updateTemporaryPlacements: (sessionId, placements) => {
       update(state => {
+        // Initialize temporaryPlacements if it doesn't exist (for old saved states)
+        if (!state.temporaryPlacements) {
+          state.temporaryPlacements = {};
+        }
+
         state.temporaryPlacements[sessionId] = placements;
         state.lastUpdate = Date.now();
 
@@ -282,12 +287,24 @@ function createGameStore() {
       const savedGame = localStorage.getItem(`scrabble_game_${gameToken}`);
       if (!savedGame) return false;
 
-      set(JSON.parse(savedGame));
+      const loadedState = JSON.parse(savedGame);
+
+      // Initialize temporaryPlacements if it doesn't exist (for old saved states)
+      if (!loadedState.temporaryPlacements) {
+        loadedState.temporaryPlacements = {};
+      }
+
+      set(loadedState);
       return true;
     },
 
     // Sync state from external update
     syncState: (newState) => {
+      // Initialize temporaryPlacements if it doesn't exist (for old saved states)
+      if (!newState.temporaryPlacements) {
+        newState.temporaryPlacements = {};
+      }
+
       set(newState);
 
       // Only save to localStorage if we're the host

@@ -164,8 +164,9 @@
 
 <style>
   .board-container {
-    @apply w-full h-full flex items-center justify-center p-2;
-    @apply overflow-auto;
+    @apply w-full h-full flex items-center justify-center;
+    @apply overflow-visible;
+    padding: 0;
   }
 
   .board {
@@ -174,8 +175,10 @@
     grid-template-columns: repeat(15, minmax(0, 1fr));
     grid-template-rows: repeat(15, minmax(0, 1fr));
     aspect-ratio: 1;
-    max-width: min(90vw, 90vh);
-    max-height: min(90vw, 90vh);
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
   }
 
   .cell {
