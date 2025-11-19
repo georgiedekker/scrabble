@@ -206,14 +206,51 @@ function createGameStore() {
     updateBoard: (placements) => {
       console.log('[gameStore.updateBoard] Updating board with placements:', placements);
       update(state => {
-        placements.forEach(({ row, col, tile }) => {
-          console.log(`[gameStore.updateBoard] Placing tile at [${row},${col}]:`, tile);
-          state.board[row][col].tile = tile;
-          state.board[row][col].locked = true;
-        });
+        // Create a new board array for Svelte reactivity
+        const newBoard = state.board.map((row, rowIdx) =>
+          row.map((cell, colIdx) => {
+            // Check if this cell has a new tile
+            const placement = placements.find(p => p.row === rowIdx && p.col === colIdx);
+            if (placement) {
+              console.log(`[gameStore.updateBoard] Placing tile at [${rowIdx},${colIdx}]:`, placement.tile);
+              return {
+                ...cell,
+                tile: placement.tile,
+                locked: true
+              };
+            }
+            return cell;
+          })
+        );
+
+        state.board = newBoard;
         state.lastUpdate = Date.now();
 
-        console.log('[gameStore.updateBoard] Board after update:', state.board.flatMap((r, ri) => r.map((c, ci) => c.tile ? {row: ri, col: ci, tile: c.tile} : null)).filter(Boolean));
+        console.log('[gameStore.updateBoard] Board after update:', newBoard.flatMap((r, ri) => r.map((c, ci) => c.tile ? {row: ri, col: ci, tile: c.tile} : null)).filter(Boolean));
+
+        if (browser) {
+          localStorage.setItem(`scrabble_game_${state.gameToken}`, JSON.stringify(state));
+        }
+
+        return state;
+      });
+    },
+
+    // Remove tiles from player rack
+    removeTilesFromRack: (sessionId, indices) => {
+      update(state => {
+        const playerIndex = state.players.findIndex(p => p.sessionId === sessionId);
+        if (playerIndex === -1) return state;
+
+        // Create new rack without the removed tiles
+        const newRack = state.players[playerIndex].rack.filter((_, i) => !indices.includes(i));
+
+        // Create new players array for reactivity
+        state.players = state.players.map((p, i) =>
+          i === playerIndex ? { ...p, rack: newRack } : p
+        );
+
+        state.lastUpdate = Date.now();
 
         if (browser) {
           localStorage.setItem(`scrabble_game_${state.gameToken}`, JSON.stringify(state));
@@ -230,7 +267,13 @@ function createGameStore() {
         if (playerIndex === -1) return state;
 
         const drawnTiles = state.tileBag.splice(0, Math.min(count, state.tileBag.length));
-        state.players[playerIndex].rack.push(...drawnTiles);
+
+        // Create new players array for reactivity
+        const newRack = [...state.players[playerIndex].rack, ...drawnTiles];
+        state.players = state.players.map((p, i) =>
+          i === playerIndex ? { ...p, rack: newRack } : p
+        );
+
         state.lastUpdate = Date.now();
 
         if (browser) {
