@@ -70,9 +70,16 @@ function createPeerStore() {
 
         // Handle incoming connections from players
         peer.on('connection', (conn) => {
-          console.log('Incoming connection from:', conn.peer, 'Open:', conn.open);
+          console.log('Incoming connection from:', conn.peer, 'Open:', conn.open, 'Metadata:', conn.metadata);
 
+          let handlerCalled = false;
           const handleConnectionOpen = () => {
+            if (handlerCalled) {
+              console.log('Handler already called for', conn.peer, ', skipping');
+              return;
+            }
+            handlerCalled = true;
+
             console.log('Connection opened with:', conn.peer);
 
             // Store connection
@@ -86,20 +93,49 @@ function createPeerStore() {
             });
 
             // Notify connection established
-            conn.send({
-              type: 'connected',
-              timestamp: Date.now()
-            });
+            console.log('Sending connected message to:', conn.peer);
+            try {
+              conn.send({
+                type: 'connected',
+                timestamp: Date.now()
+              });
+              console.log('Connected message sent successfully');
+            } catch (err) {
+              console.error('Failed to send connected message:', err);
+            }
           };
 
           // Check if connection is already open (race condition fix)
           if (conn.open) {
+            console.log('Connection already open, calling handler immediately');
             handleConnectionOpen();
           } else {
-            conn.on('open', handleConnectionOpen);
+            console.log('Connection not open yet, setting up open handler');
+            conn.on('open', () => {
+              console.log('Open event fired for:', conn.peer);
+              handleConnectionOpen();
+            });
+
+            // Add polling as backup (sometimes 'open' event doesn't fire)
+            const pollInterval = setInterval(() => {
+              if (conn.open) {
+                console.log('Connection opened via polling!');
+                clearInterval(pollInterval);
+                handleConnectionOpen();
+              }
+            }, 100);
+
+            // Stop polling after 15 seconds
+            setTimeout(() => {
+              clearInterval(pollInterval);
+              if (!conn.open) {
+                console.error('Connection never opened after 15 seconds for:', conn.peer);
+              }
+            }, 15000);
           }
 
           conn.on('data', (data) => {
+            console.log('Received data from:', conn.peer, data);
             // Handle messages from players
             const currentState = get({ subscribe });
             if (currentState.onDataReceived) {
@@ -176,7 +212,14 @@ function createPeerStore() {
             }
           }, 10000);
 
+          let handlerCalled = false;
           const handleConnectionOpen = () => {
+            if (handlerCalled) {
+              console.log('Handler already called, skipping');
+              return;
+            }
+            handlerCalled = true;
+
             console.log('Connected to host:', hostId);
             clearTimeout(connectionTimeout);
 
@@ -197,10 +240,27 @@ function createPeerStore() {
             console.log('Connection already open!');
             handleConnectionOpen();
           } else {
+            console.log('Setting up open event handler...');
             conn.on('open', handleConnectionOpen);
+
+            // Add polling as backup (sometimes 'open' event doesn't fire)
+            const pollInterval = setInterval(() => {
+              console.log('Polling connection status, open:', conn.open);
+              if (conn.open) {
+                console.log('Connection opened via polling!');
+                clearInterval(pollInterval);
+                handleConnectionOpen();
+              }
+            }, 500);
+
+            // Stop polling after connection timeout
+            setTimeout(() => {
+              clearInterval(pollInterval);
+            }, 10000);
           }
 
           conn.on('data', (data) => {
+            console.log('Received data from host:', data);
             // Handle messages from host
             const currentState = get({ subscribe });
             if (currentState.onDataReceived) {
