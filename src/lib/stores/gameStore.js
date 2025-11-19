@@ -336,12 +336,59 @@ function createGameStore() {
 
 export const gameStore = createGameStore();
 
-// Current session store
-export const currentSession = writable({
-  sessionId: null,
-  playerName: null,
-  gameToken: null
-});
+// Current session store with localStorage persistence
+function createCurrentSessionStore() {
+  const STORAGE_KEY = 'scrabble_current_session';
+
+  // Load from localStorage on initialization
+  const stored = browser ? localStorage.getItem(STORAGE_KEY) : null;
+  const initial = stored ? JSON.parse(stored) : {
+    sessionId: null,
+    playerName: null,
+    gameToken: null
+  };
+
+  const { subscribe, set, update } = writable(initial);
+
+  return {
+    subscribe,
+    set: (value) => {
+      if (browser) {
+        if (value.sessionId) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+      set(value);
+    },
+    update: (fn) => {
+      update(state => {
+        const newState = fn(state);
+        if (browser) {
+          if (newState.sessionId) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+          } else {
+            localStorage.removeItem(STORAGE_KEY);
+          }
+        }
+        return newState;
+      });
+    },
+    clear: () => {
+      if (browser) {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+      set({
+        sessionId: null,
+        playerName: null,
+        gameToken: null
+      });
+    }
+  };
+}
+
+export const currentSession = createCurrentSessionStore();
 
 // Derived store for current player
 export const currentPlayer = derived(

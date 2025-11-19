@@ -32,6 +32,10 @@
     try {
       isInitializing = true;
 
+      // Load game state from localStorage
+      const gameLoaded = gameStore.loadGame(token);
+      console.log('Game loaded from localStorage:', gameLoaded);
+
       if (isHost) {
         // Host: Peer should already be initialized from home page
         // Just verify and set up handlers
@@ -40,9 +44,9 @@
         const status = peerStore.getStatus();
 
         if (!status.isConnected) {
-          // If somehow not connected, try to initialize
-          console.log('Peer not initialized, initializing now...');
-          await initSyncAsHost();
+          // If somehow not connected (e.g., page refresh), reinitialize with same ID
+          console.log('Peer not initialized, initializing with token:', token);
+          await initSyncAsHost(token);
         }
 
         // Set up player connection handler
@@ -63,11 +67,10 @@
           }
         });
       } else {
-        // Player: Load game and connect to host
-        const loaded = gameStore.loadGame(token);
-        if (!loaded) {
+        // Player: Connect to host
+        if (!gameLoaded) {
           // No local game, will receive state from host after connecting
-          console.log('No local game found, connecting to host...');
+          console.log('No local game found, will receive state from host...');
         }
 
         await initSyncAsPlayer(token, $currentSession.sessionId);
@@ -193,7 +196,7 @@
 
         <div class="token-display">
           <span class="label">Game ID:</span>
-          <span class="token">{token.substring(0, 8)}</span>
+          <span class="token">{token}</span>
           <button
             class="copy-btn"
             on:click={handleCopyToken}
@@ -316,7 +319,7 @@
   }
 
   .token-display {
-    @apply flex items-center justify-center gap-3 mb-2;
+    @apply flex items-center justify-center gap-3 mb-2 flex-wrap;
   }
 
   .label {
@@ -324,7 +327,7 @@
   }
 
   .token {
-    @apply text-2xl md:text-3xl font-bold tracking-wider font-mono;
+    @apply text-sm md:text-base font-bold font-mono break-all;
   }
 
   .copy-btn {

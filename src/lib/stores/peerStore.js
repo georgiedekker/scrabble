@@ -32,15 +32,15 @@ function createPeerStore() {
 
     /**
      * Initialize as host (game creator)
+     * @param {string} peerId - Optional peer ID to use (for reconnection)
      */
-    initHost: () => {
+    initHost: (peerId = null) => {
       if (!browser) return null;
 
       return new Promise((resolve, reject) => {
         // Create peer with PeerJS cloud server
-        const peer = new Peer({
-          debug: 1 // Show errors only
-        });
+        // If peerId is provided, use it for reconnection
+        const peer = peerId ? new Peer(peerId, { debug: 1 }) : new Peer({ debug: 1 });
 
         peer.on('open', (id) => {
           console.log('Host peer initialized with ID:', id);

@@ -11,8 +11,9 @@ let isInitialized = false;
 
 /**
  * Initialize synchronization for host
+ * @param {string} peerId - Optional peer ID for reconnection
  */
-export async function initSyncAsHost() {
+export async function initSyncAsHost(peerId = null) {
   if (!browser) return null;
 
   // If already initialized, return existing peer ID
@@ -22,8 +23,8 @@ export async function initSyncAsHost() {
   }
 
   try {
-    // Initialize as host
-    const peerId = await peerStore.initHost();
+    // Initialize as host with optional peer ID for reconnection
+    const id = await peerStore.initHost(peerId);
 
     // Set up data handler
     peerStore.onData((data, senderSessionId) => {
@@ -44,7 +45,7 @@ export async function initSyncAsHost() {
     });
 
     isInitialized = true;
-    return peerId;
+    return id;
   } catch (error) {
     console.error('Failed to initialize host sync:', error);
     throw error;
