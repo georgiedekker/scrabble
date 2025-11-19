@@ -204,12 +204,16 @@ function createGameStore() {
 
     // Update board with new tiles
     updateBoard: (placements) => {
+      console.log('[gameStore.updateBoard] Updating board with placements:', placements);
       update(state => {
         placements.forEach(({ row, col, tile }) => {
+          console.log(`[gameStore.updateBoard] Placing tile at [${row},${col}]:`, tile);
           state.board[row][col].tile = tile;
           state.board[row][col].locked = true;
         });
         state.lastUpdate = Date.now();
+
+        console.log('[gameStore.updateBoard] Board after update:', state.board.flatMap((r, ri) => r.map((c, ci) => c.tile ? {row: ri, col: ci, tile: c.tile} : null)).filter(Boolean));
 
         if (browser) {
           localStorage.setItem(`scrabble_game_${state.gameToken}`, JSON.stringify(state));

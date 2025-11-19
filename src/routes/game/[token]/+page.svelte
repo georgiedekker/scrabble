@@ -196,13 +196,19 @@
     // Calculate score
     const score = calculateScore(temporaryPlacements, board, language);
 
+    console.log('=== ENDING TURN ===');
+    console.log('Placements to commit:', temporaryPlacements);
+    console.log('Score:', score);
+
     if (isHost) {
       // Host: Update directly and broadcast
+      console.log('Host updating board with placements');
       gameStore.updateBoard(temporaryPlacements);
       gameStore.drawTiles($currentSession.sessionId, temporaryPlacements.length);
       gameStore.endTurn($currentSession.sessionId, score);
 
       const state = gameStore.getCurrentState();
+      console.log('Broadcasting state update. Board after update:', state.board.flatMap((row, r) => row.map((cell, c) => cell.tile ? {r, c, tile: cell.tile} : null)).filter(Boolean));
       broadcastUpdate({
         type: 'state_update',
         state,
@@ -210,6 +216,7 @@
       });
     } else {
       // Player: Send action to host
+      console.log('Player sending action to host');
       sendToHost({
         type: 'action',
         action: {
@@ -226,6 +233,7 @@
     temporaryPlacements = [];
     selectedTileIndex = -1;
     error = '';
+    console.log('=== TURN ENDED ===');
   }
 
   function handlePass() {
@@ -369,20 +377,21 @@
   .game-container {
     @apply bg-gradient-to-br from-blue-50 to-indigo-100;
     @apply flex flex-col;
-    @apply p-2;
-    @apply gap-1 md:gap-2;
     height: 100vh;
     max-height: 100vh;
     overflow: hidden;
+    padding: 0.25rem;
+    gap: 0.25rem;
   }
 
   .header {
-    @apply bg-white rounded-lg shadow-lg p-2;
+    @apply bg-white rounded-lg shadow-lg;
     @apply flex items-center justify-between;
+    padding: 0.25rem 0.5rem;
   }
 
   .game-title {
-    @apply text-lg md:text-xl font-bold text-indigo-900;
+    @apply text-base md:text-lg font-bold text-indigo-900;
   }
 
   .game-info {
@@ -394,14 +403,16 @@
   }
 
   .players-bar {
-    @apply bg-white rounded-lg shadow-lg p-2;
-    @apply grid grid-cols-2 md:grid-cols-4 gap-1 md:gap-2;
+    @apply bg-white rounded-lg shadow-lg;
+    @apply grid grid-cols-2 md:grid-cols-4 gap-1;
+    padding: 0.25rem;
   }
 
   .player-info {
-    @apply bg-gray-50 rounded-lg p-2;
-    @apply border-2 border-gray-200;
+    @apply bg-gray-50 rounded;
+    @apply border border-gray-200;
     @apply transition-all duration-200;
+    padding: 0.25rem;
   }
 
   .player-info.active {
@@ -448,15 +459,17 @@
   }
 
   .rack-section {
-    @apply bg-white rounded-lg shadow-lg p-2;
+    @apply bg-white rounded-lg shadow-lg;
+    padding: 0.25rem;
   }
 
   .actions {
     @apply flex gap-2 justify-center;
+    padding: 0.25rem 0;
   }
 
   .btn {
-    @apply px-3 py-2 rounded-lg font-semibold text-sm;
+    @apply px-2 py-1 rounded-lg font-semibold text-xs;
     @apply transition-all duration-200;
     @apply flex items-center gap-1;
     @apply disabled:opacity-50 disabled:cursor-not-allowed;
@@ -476,11 +489,12 @@
   }
 
   .instructions {
-    @apply bg-indigo-50 rounded-lg p-2 text-center;
+    @apply bg-indigo-50 rounded text-center;
+    padding: 0.25rem;
   }
 
   .instruction-text {
-    @apply text-xs text-indigo-800 font-medium;
+    @apply text-[10px] text-indigo-800 font-medium;
   }
 
   @media (max-width: 640px) {

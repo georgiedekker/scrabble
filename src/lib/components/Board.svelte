@@ -11,6 +11,15 @@
   $: language = $gameStore.language;
   $: langConfig = getLanguageConfig(language);
 
+  // Log board state changes
+  $: {
+    const tilesOnBoard = board.flatMap((row, rowIdx) =>
+      row.map((cell, colIdx) => cell.tile ? {row: rowIdx, col: colIdx, tile: cell.tile} : null)
+    ).filter(Boolean);
+    console.log('Board state updated. Tiles on board:', tilesOnBoard.length, tilesOnBoard);
+    console.log('Temporary placements:', temporaryPlacements.length, temporaryPlacements);
+  }
+
   let dragOverCell = null;
 
   function getCellClass(type) {
