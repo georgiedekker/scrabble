@@ -16,33 +16,46 @@ let isInitialized = false;
 export async function initSyncAsHost(peerId = null) {
   if (!browser) return null;
 
+  // Set up data handler (always set it up, even if already initialized)
+  peerStore.onData((data, senderSessionId) => {
+    console.log('Host received data:', data, 'from:', senderSessionId);
+
+    if (data.type === 'join_request') {
+      // Handle player join request
+      console.log('Player joining:', data.playerName, 'Session:', senderSessionId);
+      gameStore.addPlayer(data.playerName, senderSessionId);
+
+      // Broadcast updated state to all players
+      const state = gameStore.getCurrentState();
+      broadcastUpdate({
+        type: 'state_update',
+        state,
+        timestamp: Date.now()
+      });
+    } else if (data.type === 'action') {
+      // Handle player actions
+      handlePlayerAction(data.action, senderSessionId);
+    } else if (data.type === 'request_state') {
+      // Send full state to player
+      const state = gameStore.getCurrentState();
+      broadcastUpdate({
+        type: 'full_state',
+        state,
+        timestamp: Date.now()
+      });
+    }
+  });
+
   // If already initialized, return existing peer ID
   if (isInitialized) {
     const status = peerStore.getStatus();
+    console.log('Already initialized, returning existing peer ID:', status.peerId);
     return status.peerId;
   }
 
   try {
     // Initialize as host with optional peer ID for reconnection
     const id = await peerStore.initHost(peerId);
-
-    // Set up data handler
-    peerStore.onData((data, senderSessionId) => {
-      console.log('Host received data:', data, 'from:', senderSessionId);
-
-      if (data.type === 'action') {
-        // Handle player actions
-        handlePlayerAction(data.action, senderSessionId);
-      } else if (data.type === 'request_state') {
-        // Send full state to player
-        const state = gameStore.getCurrentState();
-        broadcastUpdate({
-          type: 'full_state',
-          state,
-          timestamp: Date.now()
-        });
-      }
-    });
 
     isInitialized = true;
     return id;

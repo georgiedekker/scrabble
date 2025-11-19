@@ -47,25 +47,10 @@
           // If somehow not connected (e.g., page refresh), reinitialize with same ID
           console.log('Peer not initialized, initializing with token:', token);
           await initSyncAsHost(token);
+        } else {
+          console.log('Peer already connected, ID:', status.peerId);
         }
-
-        // Set up player connection handler
-        peerStore.onData((data, senderSessionId) => {
-          console.log('Lobby received data:', data);
-
-          if (data.type === 'join_request') {
-            // Add player to game
-            gameStore.addPlayer(data.playerName, senderSessionId);
-
-            // Broadcast updated state
-            const state = gameStore.getCurrentState();
-            broadcastUpdate({
-              type: 'state_update',
-              state,
-              timestamp: Date.now()
-            });
-          }
-        });
+        // Note: Data handlers are set up in sync.js (initSyncAsHost)
       } else {
         // Player: Connect to host
         if (!gameLoaded) {

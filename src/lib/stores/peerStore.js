@@ -70,9 +70,9 @@ function createPeerStore() {
 
         // Handle incoming connections from players
         peer.on('connection', (conn) => {
-          console.log('Incoming connection from:', conn.peer);
+          console.log('Incoming connection from:', conn.peer, 'Open:', conn.open);
 
-          conn.on('open', () => {
+          const handleConnectionOpen = () => {
             console.log('Connection opened with:', conn.peer);
 
             // Store connection
@@ -90,7 +90,14 @@ function createPeerStore() {
               type: 'connected',
               timestamp: Date.now()
             });
-          });
+          };
+
+          // Check if connection is already open (race condition fix)
+          if (conn.open) {
+            handleConnectionOpen();
+          } else {
+            conn.on('open', handleConnectionOpen);
+          }
 
           conn.on('data', (data) => {
             // Handle messages from players
@@ -145,6 +152,7 @@ function createPeerStore() {
 
         peer.on('open', (id) => {
           console.log('Player peer initialized with ID:', id);
+          console.log('Connecting to host:', hostId);
 
           // Connect to host
           const conn = peer.connect(hostId, {
@@ -152,8 +160,25 @@ function createPeerStore() {
             reliable: true
           });
 
-          conn.on('open', () => {
+          console.log('Connection object created, waiting for open event...');
+
+          // Add timeout for connection
+          const connectionTimeout = setTimeout(() => {
+            if (!conn.open) {
+              console.error('Connection timeout - data channel did not open within 10 seconds');
+              const timeoutError = new Error('Connection timeout');
+              update(state => ({
+                ...state,
+                state: PEER_STATES.ERROR,
+                error: 'Connection timeout. Please check your network and try again.'
+              }));
+              reject(timeoutError);
+            }
+          }, 10000);
+
+          const handleConnectionOpen = () => {
             console.log('Connected to host:', hostId);
+            clearTimeout(connectionTimeout);
 
             update(state => ({
               ...state,
@@ -165,7 +190,15 @@ function createPeerStore() {
             }));
 
             resolve(conn);
-          });
+          };
+
+          // Check if connection is already open (race condition fix)
+          if (conn.open) {
+            console.log('Connection already open!');
+            handleConnectionOpen();
+          } else {
+            conn.on('open', handleConnectionOpen);
+          }
 
           conn.on('data', (data) => {
             // Handle messages from host
@@ -177,6 +210,7 @@ function createPeerStore() {
 
           conn.on('close', () => {
             console.log('Disconnected from host');
+            clearTimeout(connectionTimeout);
             update(state => ({
               ...state,
               hostConnection: null,
@@ -186,6 +220,7 @@ function createPeerStore() {
 
           conn.on('error', (err) => {
             console.error('Host connection error:', err);
+            clearTimeout(connectionTimeout);
             update(state => ({
               ...state,
               state: PEER_STATES.ERROR,
