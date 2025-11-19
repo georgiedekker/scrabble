@@ -71,6 +71,19 @@ function createPeerStore() {
         // Handle incoming connections from players
         peer.on('connection', (conn) => {
           console.log('Incoming connection from:', conn.peer, 'Open:', conn.open, 'Metadata:', conn.metadata);
+          console.log('Connection._pc on host:', conn.peerConnection);
+
+          // Log peer connection state changes on host side
+          if (conn.peerConnection) {
+            conn.peerConnection.addEventListener('connectionstatechange', () => {
+              console.log('[Host] RTCPeerConnection state:', conn.peerConnection.connectionState);
+            });
+            conn.peerConnection.addEventListener('iceconnectionstatechange', () => {
+              console.log('[Host] ICE connection state:', conn.peerConnection.iceConnectionState);
+            });
+            console.log('[Host] Initial connection state:', conn.peerConnection.connectionState);
+            console.log('[Host] Initial ICE state:', conn.peerConnection.iceConnectionState);
+          }
 
           let handlerCalled = false;
           const handleConnectionOpen = () => {
@@ -190,13 +203,27 @@ function createPeerStore() {
           console.log('Player peer initialized with ID:', id);
           console.log('Connecting to host:', hostId);
 
-          // Connect to host
+          // Connect to host with explicit serialization
           const conn = peer.connect(hostId, {
             metadata: { sessionId },
-            reliable: true
+            reliable: true,
+            serialization: 'json'  // Use JSON instead of binary
           });
 
           console.log('Connection object created, waiting for open event...');
+          console.log('Connection._pc (peer connection):', conn.peerConnection);
+
+          // Log peer connection state changes
+          if (conn.peerConnection) {
+            conn.peerConnection.addEventListener('connectionstatechange', () => {
+              console.log('RTCPeerConnection state:', conn.peerConnection.connectionState);
+            });
+            conn.peerConnection.addEventListener('iceconnectionstatechange', () => {
+              console.log('ICE connection state:', conn.peerConnection.iceConnectionState);
+            });
+            console.log('Initial connection state:', conn.peerConnection.connectionState);
+            console.log('Initial ICE state:', conn.peerConnection.iceConnectionState);
+          }
 
           // Add timeout for connection
           const connectionTimeout = setTimeout(() => {
