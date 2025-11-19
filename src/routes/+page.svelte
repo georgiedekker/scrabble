@@ -42,11 +42,12 @@
       const { initSyncAsHost } = await import('$lib/sync.js');
       const peerId = await initSyncAsHost();
 
-      // Use the peer ID as the game token
-      const result = gameStore.newGame(playerName.trim(), selectedLanguage);
+      if (!peerId) {
+        throw new Error('Failed to get peer ID');
+      }
 
-      // Update the game with the peer ID as token
-      gameStore.updateGameToken(peerId, result.sessionId);
+      // Create game with peer ID as the game token
+      const result = gameStore.newGame(playerName.trim(), selectedLanguage, peerId);
 
       currentSession.set({
         sessionId: result.sessionId,
@@ -101,13 +102,17 @@
     }
   }
 
-  onMount(() => {
-    // Clear any existing session on home page
+  onMount(async () => {
+    // Clear any existing session and cleanup connections
     currentSession.set({
       sessionId: null,
       playerName: null,
       gameToken: null
     });
+
+    // Cleanup any existing peer connections to ensure fresh start
+    const { cleanupSync } = await import('$lib/sync.js');
+    cleanupSync();
   });
 </script>
 

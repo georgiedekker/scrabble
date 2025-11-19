@@ -92,8 +92,9 @@ function createGameStore() {
     subscribe,
 
     // Initialize a new game
-    newGame: (hostName, language = 'EN') => {
-      const gameToken = generateToken();
+    newGame: (hostName, language = 'EN', gameToken = null) => {
+      // Use provided token (e.g., peer ID) or generate a random one
+      const token = gameToken || generateToken();
       const langConfig = getLanguageConfig(language);
       const tileBag = shuffleTiles(langConfig.tiles);
 
@@ -107,7 +108,7 @@ function createGameStore() {
       };
 
       const state = {
-        gameToken,
+        gameToken: token,
         language,
         board: createEmptyBoard(),
         tileBag,
@@ -121,10 +122,10 @@ function createGameStore() {
       set(state);
 
       if (browser) {
-        localStorage.setItem(`scrabble_game_${gameToken}`, JSON.stringify(state));
+        localStorage.setItem(`scrabble_game_${token}`, JSON.stringify(state));
       }
 
-      return { gameToken, sessionId: hostPlayer.sessionId };
+      return { gameToken: token, sessionId: hostPlayer.sessionId };
     },
 
     // Join an existing game
