@@ -82,28 +82,6 @@
     draggingTileIndex = index;
   }
 
-  function broadcastTemporaryPlacements() {
-    if (isHost) {
-      // Host: Update local state directly
-      gameStore.updateTemporaryPlacements($currentSession.sessionId, temporaryPlacements);
-
-      // Broadcast to all players
-      const state = gameStore.getCurrentState();
-      broadcastUpdate({
-        type: 'state_update',
-        state,
-        timestamp: Date.now()
-      });
-    } else {
-      // Player: Send to host
-      sendToHost({
-        type: 'temporary_placement',
-        placements: temporaryPlacements,
-        timestamp: Date.now()
-      });
-    }
-  }
-
   function handleCellDrop(row, col, tileData) {
     if (!$isMyTurn) {
       error = "It's not your turn";
@@ -138,9 +116,6 @@
     selectedTileIndex = -1;
     draggingTileIndex = -1;
     error = '';
-
-    // Broadcast temporary placement to other players
-    broadcastTemporaryPlacements();
   }
 
   function handleCellClick(row, col) {
@@ -183,24 +158,17 @@
       myRack = myRack.filter((_, i) => i !== selectedTileIndex);
       selectedTileIndex = -1;
       error = '';
-
-      // Broadcast temporary placement to other players
-      broadcastTemporaryPlacements();
     }
   }
 
   function handleRecall() {
     // Return all temporary placements back to rack
-    temporaryPlacements.forEach(placement => {
-      myRack.push(placement.tile.letter);
-    });
+    const returnedLetters = temporaryPlacements.map(placement => placement.tile.letter);
+    myRack = [...myRack, ...returnedLetters];
 
     temporaryPlacements = [];
     selectedTileIndex = -1;
     error = '';
-
-    // Broadcast cleared temporary placements
-    broadcastTemporaryPlacements();
   }
 
   function handleEndTurn() {
@@ -397,10 +365,13 @@
 
 <style>
   .game-container {
-    @apply min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100;
+    @apply bg-gradient-to-br from-blue-50 to-indigo-100;
     @apply flex flex-col;
     @apply p-2;
     @apply gap-1 md:gap-2;
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
   }
 
   .header {

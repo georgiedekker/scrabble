@@ -149,7 +149,7 @@
               letter={tile.letter}
               points={tile.points}
               isBlank={tile.isBlank}
-              size="small"
+              size="fill"
             />
           {:else}
             <span class="cell-label">
@@ -187,6 +187,7 @@
     @apply relative;
     min-width: 0;
     min-height: 0;
+    font-size: clamp(12px, 3vw, 32px);
   }
 
   .cell:not(.has-tile):not(:disabled):hover {

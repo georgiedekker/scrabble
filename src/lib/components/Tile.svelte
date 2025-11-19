@@ -2,17 +2,19 @@
   export let letter = '';
   export let points = 0;
   export let isBlank = false;
-  export let size = 'normal'; // 'small', 'normal', 'large'
+  export let size = 'normal'; // 'small', 'normal', 'large', 'fill'
   export let draggable = false;
   export let selected = false;
 
   const sizeClasses = {
+    fill: 'w-full h-full text-[0.6em]',
     small: 'w-8 h-8 text-sm',
     normal: 'w-12 h-12 text-lg',
     large: 'w-16 h-16 text-xl'
   };
 
   const pointsSizeClasses = {
+    fill: 'text-[0.35em]',
     small: 'text-[8px]',
     normal: 'text-[10px]',
     large: 'text-xs'
