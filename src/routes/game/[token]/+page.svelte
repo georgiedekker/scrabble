@@ -110,6 +110,7 @@
     };
 
     temporaryPlacements = [...temporaryPlacements, { row, col, tile }];
+    console.log('Added tile via drag at', row, col, 'Tile:', tile, 'All placements:', temporaryPlacements);
 
     // Remove tile from rack
     myRack = myRack.filter((_, i) => i !== tileData.index);
@@ -137,7 +138,7 @@
     if (existingIndex !== -1) {
       // Remove the placement and return the tile to rack
       const placement = temporaryPlacements[existingIndex];
-      myRack.push(placement.tile.letter);
+      myRack = [...myRack, placement.tile.letter];
       temporaryPlacements = temporaryPlacements.filter((_, i) => i !== existingIndex);
       selectedTileIndex = -1;
       return;
@@ -153,6 +154,7 @@
       };
 
       temporaryPlacements = [...temporaryPlacements, { row, col, tile }];
+      console.log('Added tile via click at', row, col, 'Tile:', tile, 'All placements:', temporaryPlacements);
 
       // Remove tile from rack
       myRack = myRack.filter((_, i) => i !== selectedTileIndex);

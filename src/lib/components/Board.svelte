@@ -10,7 +10,6 @@
   $: board = $gameStore.board;
   $: language = $gameStore.language;
   $: langConfig = getLanguageConfig(language);
-  $: allTemporaryPlacements = $gameStore.temporaryPlacements || {};
 
   let dragOverCell = null;
 
@@ -52,36 +51,23 @@
   }
 
   function getTileAtPosition(row, col) {
-    // Check if there's a temporary placement from current player first
+    // Check if there's a temporary placement from current player
     const tempPlacement = temporaryPlacements.find(p => p.row === row && p.col === col);
-    if (tempPlacement) return tempPlacement.tile;
-
-    // Check all other players' temporary placements
-    for (const sessionId in allTemporaryPlacements) {
-      const placements = allTemporaryPlacements[sessionId];
-      const otherPlacement = placements?.find(p => p.row === row && p.col === col);
-      if (otherPlacement) return otherPlacement.tile;
+    if (tempPlacement) {
+      console.log('Found temp placement at', row, col, ':', tempPlacement.tile);
+      return tempPlacement.tile;
     }
 
-    // Otherwise return the permanent tile
-    return board[row][col].tile;
+    // Return the permanent tile
+    const permanentTile = board[row][col].tile;
+    if (permanentTile) {
+      console.log('Found permanent tile at', row, col, ':', permanentTile);
+    }
+    return permanentTile;
   }
 
   function isTemporaryPlacement(row, col) {
-    // Check current player's placements
-    if (temporaryPlacements.some(p => p.row === row && p.col === col)) {
-      return true;
-    }
-
-    // Check all other players' temporary placements
-    for (const sessionId in allTemporaryPlacements) {
-      const placements = allTemporaryPlacements[sessionId];
-      if (placements?.some(p => p.row === row && p.col === col)) {
-        return true;
-      }
-    }
-
-    return false;
+    return temporaryPlacements.some(p => p.row === row && p.col === col);
   }
 
   function handleDragOver(event, row, col) {
@@ -175,8 +161,6 @@
     grid-template-columns: repeat(15, minmax(0, 1fr));
     grid-template-rows: repeat(15, minmax(0, 1fr));
     aspect-ratio: 1;
-    width: 100%;
-    height: 100%;
     max-width: 100%;
     max-height: 100%;
   }
