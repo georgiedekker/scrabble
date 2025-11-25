@@ -11,6 +11,7 @@
   let token = '';
   let showCopied = false;
   let shareUrl = '';
+  let shareLabel = 'Copy Share Link';
   let connectionError = '';
   let isInitializing = true;
 
@@ -103,23 +104,26 @@
     }
   });
 
+  function showCopiedMessage(label = 'Copied to clipboard!') {
+    shareLabel = label;
+    showCopied = true;
+    setTimeout(() => {
+      showCopied = false;
+      shareLabel = 'Copy Share Link';
+    }, 2000);
+  }
+
   async function handleCopyToken() {
     const success = await copyToClipboard(token);
     if (success) {
-      showCopied = true;
-      setTimeout(() => {
-        showCopied = false;
-      }, 2000);
+      showCopiedMessage('Game ID copied!');
     }
   }
 
   async function handleCopyLink() {
     const success = await copyToClipboard(shareUrl);
     if (success) {
-      showCopied = true;
-      setTimeout(() => {
-        showCopied = false;
-      }, 2000);
+      showCopiedMessage('Invite link copied!');
     }
   }
 
@@ -206,7 +210,7 @@
         {#if isHost}
           <button class="btn-share" on:click={handleCopyLink}>
             <Copy class="w-4 h-4" />
-            Copy Share Link
+            {shareLabel}
           </button>
         {/if}
       </div>
@@ -278,7 +282,7 @@
   </div>
 </div>
 
-<style>
+<style lang="postcss">
   .container {
     @apply min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100;
     @apply flex items-center justify-center p-4;

@@ -149,6 +149,7 @@ function handlePlayerAction(action, sessionId) {
   switch (action.type) {
     case 'place_tiles':
       gameStore.updateBoard(action.placements);
+      gameStore.removeTilesFromRack(sessionId, action.placements.map(p => p.tile.letter));
       gameStore.drawTiles(sessionId, action.tilesUsed);
       gameStore.endTurn(sessionId, action.score);
       break;

@@ -61,7 +61,10 @@
       goto(`/lobby/${peerId}`);
     } catch (err) {
       console.error('Failed to create game:', err);
-      error = 'Failed to initialize connection. Please try again.';
+      error = err?.message || 'Failed to initialize connection. Please try again.';
+      if (error.includes('PeerServer') || error.includes('signaling')) {
+        error = 'Cannot reach signaling server. Set VITE_PEER_HOST to your PeerServer and retry.';
+      }
     }
   }
 
@@ -246,7 +249,7 @@
   </div>
 </div>
 
-<style>
+<style lang="postcss">
   .container {
     @apply min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100;
     @apply flex items-center justify-center p-4;

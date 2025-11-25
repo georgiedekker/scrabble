@@ -204,6 +204,7 @@
       // Host: Update directly and broadcast
       console.log('Host updating board with placements');
       gameStore.updateBoard(temporaryPlacements);
+      gameStore.removeTilesFromRack($currentSession.sessionId, temporaryPlacements.map(p => p.tile.letter));
       gameStore.drawTiles($currentSession.sessionId, temporaryPlacements.length);
       gameStore.endTurn($currentSession.sessionId, score);
 
@@ -373,7 +374,7 @@
   </div>
 </div>
 
-<style>
+<style lang="postcss">
   .game-container {
     @apply bg-gradient-to-br from-blue-50 to-indigo-100;
     @apply flex flex-col;
@@ -450,12 +451,12 @@
   }
 
   .board-section {
-    /* Make board grow to fill available space */
+    /* Give the board more real estate */
     flex: 1;
-    min-height: 0;
+    min-height: 60vh;
     @apply bg-white rounded-lg shadow-lg;
     @apply flex items-center justify-center;
-    padding: 0.5rem;
+    padding: 1rem;
   }
 
   .rack-section {

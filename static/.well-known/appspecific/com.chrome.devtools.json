@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "label": "SvelteKit",
+  "endpoints": [
+    {
+      "type": "devtools-for-chrome",
+      "url": "http://localhost:5173"
+    }
+  ]
+}

@@ -27,6 +27,98 @@ function createPeerStore() {
     error: null
   });
 
+  const BASE_PEER_CONFIG = {
+    debug: 1,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:global.stun.twilio.com:3478' }
+      ],
+      iceCandidatePoolSize: 10
+    }
+  };
+
+  const getServerCandidates = () => {
+    const servers = [];
+
+    // Optional self-hosted PeerServer via env; only active when VITE_PEER_HOST is set
+    if (browser) {
+      const envHost = import.meta.env.VITE_PEER_HOST;
+      if (envHost) {
+        const path = (import.meta.env.VITE_PEER_PATH || 'peerjs').replace(/^\//, '');
+        servers.push({
+          host: envHost,
+          path,
+          secure: import.meta.env.VITE_PEER_SECURE !== 'false',
+          port: import.meta.env.VITE_PEER_PORT ? Number(import.meta.env.VITE_PEER_PORT) : 443
+        });
+      }
+    }
+
+    // Default to PeerJS cloud
+    servers.push({ host: '0.peerjs.com', path: 'peerjs', secure: true, port: 443 });
+    servers.push({ host: 'peerjs.com', path: 'peerjs', secure: true, port: 443 });
+
+    return servers;
+  };
+
+  const createPeerWithFallback = (peerId = null) => {
+    const servers = getServerCandidates();
+    let lastError = null;
+
+    return new Promise((resolve, reject) => {
+      const tryServer = (index) => {
+        if (index >= servers.length) {
+          const friendly = new Error(
+            'Unable to reach any PeerJS signaling server. Configure VITE_PEER_HOST (and optional VITE_PEER_PORT/VITE_PEER_PATH/VITE_PEER_SECURE) to use your own PeerServer.'
+          );
+          reject(lastError || friendly);
+          return;
+        }
+
+        const server = servers[index];
+        const config = { ...BASE_PEER_CONFIG, ...server };
+
+        console.log('[peerStore] Attempting PeerJS server', server);
+
+        const peer = peerId ? new Peer(peerId, config) : new Peer(config);
+
+        const cleanup = () => {
+          if (typeof peer.off === 'function') {
+            peer.off('error', onError);
+            peer.off('open', onOpen);
+          } else if (typeof peer.removeListener === 'function') {
+            peer.removeListener('error', onError);
+            peer.removeListener('open', onOpen);
+          }
+        };
+
+        const onOpen = (id) => {
+          cleanup();
+          console.log('[peerStore] Connected to PeerJS server', server.host, 'with id', id);
+          resolve({ peer, server });
+        };
+
+        const onError = (err) => {
+          cleanup();
+          lastError = err;
+          console.error('[peerStore] Peer init error with', server.host, err);
+          try {
+            peer.destroy();
+          } catch (_) {
+            // ignore
+          }
+          tryServer(index + 1);
+        };
+
+        peer.on('open', onOpen);
+        peer.on('error', onError);
+      };
+
+      tryServer(0);
+    });
+  };
+
   return {
     subscribe,
 
@@ -38,22 +130,9 @@ function createPeerStore() {
       if (!browser) return null;
 
       return new Promise((resolve, reject) => {
-        // Create peer with PeerJS cloud server and proper ICE configuration
-        const config = {
-          debug: 1,
-          config: {
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:global.stun.twilio.com:3478' }
-            ],
-            iceCandidatePoolSize: 10
-          }
-        };
+        createPeerWithFallback(peerId).then(({ peer }) => {
+          const id = peer.id;
 
-        // If peerId is provided, use it for reconnection
-        const peer = peerId ? new Peer(peerId, config) : new Peer(config);
-
-        peer.on('open', (id) => {
           console.log('Host peer initialized with ID:', id);
 
           update(state => ({
@@ -64,25 +143,20 @@ function createPeerStore() {
             state: PEER_STATES.CONNECTED
           }));
 
-          resolve(id);
-        });
+          peer.on('error', (err) => {
+            console.error('Peer error:', err);
 
-        peer.on('error', (err) => {
-          console.error('Peer error:', err);
+            update(state => ({
+              ...state,
+              state: PEER_STATES.ERROR,
+              error: err.type === 'unavailable-id' ? 'Game ID already in use' : err.message
+            }));
+          });
 
-          update(state => ({
-            ...state,
-            state: PEER_STATES.ERROR,
-            error: err.type === 'unavailable-id' ? 'Game ID already in use' : err.message
-          }));
-
-          reject(err);
-        });
-
-        // Handle incoming connections from players
-        peer.on('connection', (conn) => {
-          console.log('Incoming connection from:', conn.peer, 'Open:', conn.open, 'Metadata:', conn.metadata);
-          console.log('Connection._pc on host:', conn.peerConnection);
+          // Handle incoming connections from players
+          peer.on('connection', (conn) => {
+            console.log('Incoming connection from:', conn.peer, 'Open:', conn.open, 'Metadata:', conn.metadata);
+            console.log('Connection._pc on host:', conn.peerConnection);
 
           // Log peer connection state changes on host side
           if (conn.peerConnection) {
@@ -179,22 +253,33 @@ function createPeerStore() {
             });
           });
 
-          conn.on('error', (err) => {
-            console.error('Connection error:', err);
+            conn.on('error', (err) => {
+              console.error('Connection error:', err);
+            });
           });
-        });
 
-        peer.on('disconnected', () => {
-          console.log('Peer disconnected');
+          peer.on('disconnected', () => {
+            console.log('Peer disconnected');
+            update(state => ({
+              ...state,
+              state: PEER_STATES.DISCONNECTED
+            }));
+
+            // Try to reconnect
+            if (peer && !peer.destroyed) {
+              peer.reconnect();
+            }
+          });
+
+          resolve(id);
+        }).catch((err) => {
+          console.error('Failed to initialize host sync:', err);
           update(state => ({
             ...state,
-            state: PEER_STATES.DISCONNECTED
+            state: PEER_STATES.ERROR,
+            error: err.message || 'Unable to reach signaling server. Please configure VITE_PEER_HOST to point to your PeerServer.'
           }));
-
-          // Try to reconnect
-          if (peer && !peer.destroyed) {
-            peer.reconnect();
-          }
+          reject(err);
         });
       });
     },
@@ -206,18 +291,9 @@ function createPeerStore() {
       if (!browser) return null;
 
       return new Promise((resolve, reject) => {
-        const peer = new Peer({
-          debug: 1,
-          config: {
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:global.stun.twilio.com:3478' }
-            ],
-            iceCandidatePoolSize: 10
-          }
-        });
+        createPeerWithFallback().then(({ peer }) => {
+          const id = peer.id;
 
-        peer.on('open', (id) => {
           console.log('Player peer initialized with ID:', id);
           console.log('Connecting to host:', hostId);
 
@@ -333,24 +409,34 @@ function createPeerStore() {
             }));
             reject(err);
           });
-        });
 
-        peer.on('error', (err) => {
-          console.error('Peer error:', err);
+          peer.on('error', (err) => {
+            console.error('Peer error:', err);
 
-          let errorMessage = err.message;
-          if (err.type === 'peer-unavailable') {
-            errorMessage = 'Game not found. Check the game ID.';
-          } else if (err.type === 'network') {
-            errorMessage = 'Network error. Please check your connection.';
-          }
+            let errorMessage = err.message;
+            if (err.type === 'peer-unavailable') {
+              errorMessage = 'Game not found. Check the game ID.';
+            } else if (err.type === 'network') {
+              errorMessage = 'Network error. Please check your connection.';
+            } else if (err.message?.includes('signaling server')) {
+              errorMessage = 'Unable to reach signaling server. Please configure VITE_PEER_HOST to point to your PeerServer.';
+            }
 
+            update(state => ({
+              ...state,
+              state: PEER_STATES.ERROR,
+              error: errorMessage
+            }));
+
+            reject(err);
+          });
+        }).catch((err) => {
+          console.error('Failed to initialize player peer:', err);
           update(state => ({
             ...state,
             state: PEER_STATES.ERROR,
-            error: errorMessage
+            error: err.message || 'Unable to reach signaling server. Please configure VITE_PEER_HOST to point to your PeerServer.'
           }));
-
           reject(err);
         });
 

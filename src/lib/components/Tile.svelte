@@ -21,24 +21,37 @@
   };
 </script>
 
-<div
-  class="tile {sizeClasses[size]} {selected ? 'ring-2 ring-blue-500' : ''}"
-  class:draggable
-  class:blank={isBlank}
-  role={draggable ? 'button' : 'none'}
-  tabindex={draggable ? 0 : -1}
-  on:mousedown
-  on:touchstart
->
-  <div class="tile-content">
-    <span class="tile-letter">{letter === '_' ? '' : letter}</span>
-    {#if !isBlank && letter !== '_'}
-      <span class="tile-points {pointsSizeClasses[size]}">{points}</span>
-    {/if}
+{#if draggable}
+  <button
+    type="button"
+    class="tile {sizeClasses[size]} {selected ? 'ring-2 ring-blue-500' : ''}"
+    class:draggable
+    class:blank={isBlank}
+    on:mousedown
+    on:touchstart|passive
+  >
+    <div class="tile-content">
+      <span class="tile-letter">{letter === '_' ? '' : letter}</span>
+      {#if !isBlank && letter !== '_'}
+        <span class="tile-points {pointsSizeClasses[size]}">{points}</span>
+      {/if}
+    </div>
+  </button>
+{:else}
+  <div
+    class="tile {sizeClasses[size]} {selected ? 'ring-2 ring-blue-500' : ''}"
+    class:blank={isBlank}
+  >
+    <div class="tile-content">
+      <span class="tile-letter">{letter === '_' ? '' : letter}</span>
+      {#if !isBlank && letter !== '_'}
+        <span class="tile-points {pointsSizeClasses[size]}">{points}</span>
+      {/if}
+    </div>
   </div>
-</div>
+{/if}
 
-<style>
+<style lang="postcss">
   .tile {
     @apply relative rounded bg-tile-bg border-2 border-tile-text shadow-md;
     @apply flex items-center justify-center font-bold select-none;

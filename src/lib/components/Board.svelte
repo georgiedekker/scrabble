@@ -2,6 +2,7 @@
   import { gameStore } from '../stores/gameStore.js';
   import { getLanguageConfig } from '../languages.js';
   import Tile from './Tile.svelte';
+  import { scale } from 'svelte/transition';
 
   export let onCellClick = null;
   export let onCellDrop = null;
@@ -60,19 +61,22 @@
   }
 
   function getTileAtPosition(row, col) {
-    // Check if there's a temporary placement from current player
-    const tempPlacement = temporaryPlacements.find(p => p.row === row && p.col === col);
+    // Prefer temporary placement, fall back to board tile
+    const tempPlacement = temporaryPlacements.find((p) => p.row === row && p.col === col);
     if (tempPlacement) {
-      console.log('Found temp placement at', row, col, ':', tempPlacement.tile);
-      return tempPlacement.tile;
+      const letter = tempPlacement.tile?.letter ?? tempPlacement.letter;
+      if (!letter) return null;
+
+      // Build a tile payload even if the incoming placement is missing a tile object
+      return {
+        letter,
+        points: tempPlacement.tile?.points ?? langConfig.points[letter] ?? 0,
+        isBlank: tempPlacement.tile?.isBlank ?? letter === '_'
+      };
     }
 
-    // Return the permanent tile
     const permanentTile = board[row][col].tile;
-    if (permanentTile) {
-      console.log('Found permanent tile at', row, col, ':', permanentTile);
-    }
-    return permanentTile;
+    return permanentTile || null;
   }
 
   function isTemporaryPlacement(row, col) {
@@ -139,13 +143,18 @@
           disabled={cell.locked}
         >
           {#if getTileAtPosition(rowIndex, colIndex)}
-            {@const tile = getTileAtPosition(rowIndex, colIndex)}
-            <Tile
-              letter={tile.letter}
-              points={tile.points}
-              isBlank={tile.isBlank}
-              size="fill"
-            />
+            {#key `${rowIndex}-${colIndex}-${getTileAtPosition(rowIndex, colIndex).letter}`}
+              {@const tile = getTileAtPosition(rowIndex, colIndex)}
+              <div transition:scale={{ duration: 150, start: 0.6 }} class="board-tile-wrapper">
+                <Tile
+                  class="board-tile"
+                  letter={tile.letter}
+                  points={tile.points}
+                  isBlank={tile.isBlank}
+                  size="fill"
+                />
+              </div>
+            {/key}
           {:else}
             <span class="cell-label">
               {getCellLabel(cell.type, rowIndex, colIndex)}
@@ -157,7 +166,7 @@
   </div>
 </div>
 
-<style>
+<style lang="postcss">
   .board-container {
     @apply w-full h-full flex items-center justify-center;
     @apply overflow-visible;
@@ -170,8 +179,11 @@
     grid-template-columns: repeat(15, minmax(0, 1fr));
     grid-template-rows: repeat(15, minmax(0, 1fr));
     aspect-ratio: 1;
-    max-width: 100%;
-    max-height: 100%;
+    /* Scale the board relative to the viewport instead of the small center column */
+    width: clamp(360px, 70vh, 960px);
+    height: clamp(360px, 70vh, 960px);
+    max-width: 90vw;
+    max-height: 90vh;
   }
 
   .cell {
@@ -205,6 +217,10 @@
 
   .cell-label {
     @apply text-[8px] md:text-xs font-bold select-none;
+  }
+
+  .board-tile {
+    @apply w-full h-full shadow-lg;
   }
 
   @media (max-width: 640px) {

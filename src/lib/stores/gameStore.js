@@ -160,7 +160,9 @@ function createGameStore() {
       state.lastUpdate = Date.now();
 
       set(state);
-      localStorage.setItem(`scrabble_game_${gameToken}`, JSON.stringify(state));
+      if (browser) {
+        localStorage.setItem(`scrabble_game_${gameToken}`, JSON.stringify(state));
+      }
 
       return sessionId;
     },
@@ -179,8 +181,10 @@ function createGameStore() {
           if (oldToken) {
             localStorage.removeItem(`scrabble_game_${oldToken}`);
           }
+        }
 
-          // Save with new token
+        // Save with new token
+        if (browser) {
           localStorage.setItem(`scrabble_game_${newToken}`, JSON.stringify(state));
         }
 
@@ -237,17 +241,24 @@ function createGameStore() {
     },
 
     // Remove tiles from player rack
-    removeTilesFromRack: (sessionId, indices) => {
+    removeTilesFromRack: (sessionId, letters) => {
       update(state => {
         const playerIndex = state.players.findIndex(p => p.sessionId === sessionId);
         if (playerIndex === -1) return state;
 
-        // Create new rack without the removed tiles
-        const newRack = state.players[playerIndex].rack.filter((_, i) => !indices.includes(i));
+        const removalQueue = [...(letters || [])];
+        const rack = [...state.players[playerIndex].rack];
+
+        for (const letter of removalQueue) {
+          const removeIndex = rack.indexOf(letter);
+          if (removeIndex !== -1) {
+            rack.splice(removeIndex, 1);
+          }
+        }
 
         // Create new players array for reactivity
         state.players = state.players.map((p, i) =>
-          i === playerIndex ? { ...p, rack: newRack } : p
+          i === playerIndex ? { ...p, rack } : p
         );
 
         state.lastUpdate = Date.now();

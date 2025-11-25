@@ -46,10 +46,7 @@
       onDragStart(index, tiles[index]);
     }
 
-    // For touch devices
-    if (event.type === 'touchstart') {
-      event.preventDefault();
-    }
+    // For touch devices the element styling already sets touch-action to none
   }
 
   function handleDragOver(event, index) {
@@ -147,10 +144,17 @@
         on:dragover={(e) => handleDragOver(e, index)}
         on:drop={(e) => handleDrop(e, index)}
         on:dragend={handleDragEnd}
-        on:touchstart={(e) => handleTouchStart(e, index)}
+        on:touchstart|passive={(e) => handleTouchStart(e, index)}
         on:touchmove={handleTouchMove}
         on:touchend={handleTouchEnd}
         on:click={() => handleTileClick(index)}
+        on:keydown={(e) => {
+          if (disabled) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleTileClick(index);
+          }
+        }}
         role="button"
         tabindex={disabled ? -1 : 0}
       >
@@ -174,7 +178,7 @@
   </div>
 </div>
 
-<style>
+<style lang="postcss">
   .tile-rack {
     @apply w-full p-4 bg-gradient-to-b from-amber-700 to-amber-900;
     @apply rounded-lg shadow-lg border-4 border-amber-800;
@@ -192,10 +196,14 @@
   .rack-tile {
     @apply transition-all duration-200;
     @apply touch-none;
+    transform: translateY(0) scale(1);
+    will-change: transform, box-shadow, opacity;
   }
 
   .rack-tile.dragging {
-    @apply opacity-50 scale-95;
+    @apply opacity-60;
+    transform: translateY(-6px) scale(1.08) rotate(-2deg);
+    box-shadow: 0 18px 30px rgba(0, 0, 0, 0.25);
   }
 
   .rack-tile.drag-over {
